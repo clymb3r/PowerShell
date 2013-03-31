@@ -73,11 +73,13 @@ extern "C" __declspec( dllexport ) wchar_t* WStringFunc()
 If you want to use a DLL which returns a different data type, or which takes parameters, you will need to modify
 this script to accomodate this. You can find the code to modify in the section labeled "YOUR CODE GOES HERE".
 
-Find a DemoDLL at: TODO link
+Find a DemoDLL at: https://github.com/clymb3r/PowerShell/tree/master/Invoke-ReflectiveDllInjection
 
 .LINK
 
-TODO: BLOG
+Blog: http://clymb3r.wordpress.com/
+Github repo: https://github.com/clymb3r/PowerShell/tree/master/Invoke-ReflectiveDllInjection
+
 #>
 
 [CmdletBinding(DefaultParameterSetName="LocalHost")]
