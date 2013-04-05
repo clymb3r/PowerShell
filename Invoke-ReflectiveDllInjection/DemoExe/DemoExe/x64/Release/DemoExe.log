@@ -1,0 +1,24 @@
+﻿Build started 4/2/2013 10:46:12 PM.
+     1>Project "C:\Users\joe.HOME\Documents\GitHub\PowerShell\Invoke-ReflectiveDllInjection\DemoExe\DemoExe\DemoExe.vcxproj" on node 2 (build target(s)).
+     1>InitializeBuildStatus:
+         Creating "x64\Release\DemoExe.unsuccessfulbuild" because "AlwaysCreate" was specified.
+       ClCompile:
+         All outputs are up-to-date.
+         C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\bin\x86_amd64\CL.exe /c /Zi /nologo /W3 /WX- /O2 /Oi /GL /D WIN32 /D NDEBUG /D _CONSOLE /D _UNICODE /D UNICODE /Gm- /EHsc /MD /GS /Gy /fp:precise /Zc:wchar_t /Zc:forScope /Yu"StdAfx.h" /Fp"x64\Release\DemoExe.pch" /Fo"x64\Release\\" /Fd"x64\Release\vc100.pdb" /Gd /TP /errorReport:prompt DemoExe.cpp
+         DemoExe.cpp
+       Link:
+         C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\bin\x86_amd64\link.exe /ERRORREPORT:PROMPT /OUT:"C:\Users\joe.HOME\Documents\GitHub\PowerShell\Invoke-ReflectiveDllInjection\DemoExe\x64\Release\DemoExe.exe" /INCREMENTAL:NO /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /ManifestFile:"x64\Release\DemoExe.exe.intermediate.manifest" /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /DEBUG /PDB:"C:\Users\joe.HOME\Documents\GitHub\PowerShell\Invoke-ReflectiveDllInjection\DemoExe\x64\Release\DemoExe.pdb" /SUBSYSTEM:CONSOLE /OPT:REF /OPT:ICF /LTCG /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:\Users\joe.HOME\Documents\GitHub\PowerShell\Invoke-ReflectiveDllInjection\DemoExe\x64\Release\DemoExe.lib" /MACHINE:X64 x64\Release\DemoExe.obj
+         x64\Release\stdafx.obj
+         Generating code
+         Finished generating code
+         DemoExe.vcxproj -> C:\Users\joe.HOME\Documents\GitHub\PowerShell\Invoke-ReflectiveDllInjection\DemoExe\x64\Release\DemoExe.exe
+       Manifest:
+         C:\Program Files (x86)\Microsoft SDKs\Windows\v7.0A\bin\mt.exe /nologo /verbose /outputresource:"C:\Users\joe.HOME\Documents\GitHub\PowerShell\Invoke-ReflectiveDllInjection\DemoExe\x64\Release\DemoExe.exe;#1" /manifest x64\Release\DemoExe.exe.intermediate.manifest
+       FinalizeBuildStatus:
+         Deleting file "x64\Release\DemoExe.unsuccessfulbuild".
+         Touching "x64\Release\DemoExe.lastbuildstate".
+     1>Done Building Project "C:\Users\joe.HOME\Documents\GitHub\PowerShell\Invoke-ReflectiveDllInjection\DemoExe\DemoExe\DemoExe.vcxproj" (build target(s)).
+
+Build succeeded.
+
+Time Elapsed 00:00:00.57

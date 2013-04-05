@@ -98,7 +98,11 @@ Param(
 	
 	[Parameter(Position = 2, Mandatory = $false)]
 	[String]
-	$FuncReturnType
+	$FuncReturnType,
+	
+	[Parameter(Position = 3, Mandatory = $false)]
+	[String[]]
+	$ExeArgs
 )
 
 Set-StrictMode -Version 2
@@ -445,6 +449,8 @@ $RemoteScriptBlock = {
 		$Win32Constants | Add-Member -MemberType NoteProperty -Name IMAGE_SCN_MEM_WRITE -Value 0x80000000
 		$Win32Constants | Add-Member -MemberType NoteProperty -Name IMAGE_SCN_MEM_NOT_CACHED -Value 0x04000000
 		$Win32Constants | Add-Member -MemberType NoteProperty -Name MEM_DECOMMIT -Value 0x4000
+		$Win32Constants | Add-Member -MemberType NoteProperty -Name IMAGE_FILE_EXECUTABLE_IMAGE -Value 0x0002
+		$Win32Constants | Add-Member -MemberType NoteProperty -Name IMAGE_FILE_DLL -Value 0x2000
 		
 		return $Win32Constants
 	}
@@ -907,7 +913,11 @@ $RemoteScriptBlock = {
 		
 		[Parameter(Position = 1, Mandatory = $true)]
 		[System.Object]
-		$Win32Types
+		$Win32Types,
+		
+		[Parameter(Position = 2, Mandatory = $true)]
+		[System.Object]
+		$Win32Constants
 		)
 		
 		if ($DllHandle -eq $null -or $DllHandle -eq [IntPtr]::Zero)
@@ -935,6 +945,19 @@ $RemoteScriptBlock = {
 		{
 			[IntPtr]$SectionHeaderPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$DllInfo.NtHeadersPtr) ([System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_NT_HEADERS32)))
 			$DllInfo | Add-Member -MemberType NoteProperty -Name SectionHeaderPtr -Value $SectionHeaderPtr
+		}
+		
+		if (($NtHeadersInfo.IMAGE_NT_HEADERS.FileHeader.Characteristics -band $Win32Constants.IMAGE_FILE_EXECUTABLE_IMAGE) -eq $Win32Constants.IMAGE_FILE_EXECUTABLE_IMAGE)
+		{
+			$DllInfo | Add-Member -MemberType NoteProperty -Name FileType -Value 'EXE'
+		}
+		elseif (($NtHeadersInfo.IMAGE_NT_HEADERS.FileHeader.Characteristics -band $Win32Constants.IMAGE_FILE_DLL) -eq $Win32Constants.IMAGE_FILE_DLL)
+		{
+			$DllInfo | Add-Member -MemberType NoteProperty -Name FileType -Value 'DLL'
+		}
+		else
+		{
+			Throw "PE file is not an EXE or DLL"
 		}
 		
 		return $DllInfo
@@ -1361,7 +1384,11 @@ $RemoteScriptBlock = {
 		Param(
 		[Parameter( Position = 0, Mandatory = $true )]
 		[Byte[]]
-		$DllBytes
+		$DllBytes,
+		
+		[Parameter(Position = 1, Mandatory = $false)]
+		[String[]]
+		$ExeArgs
 		)
 		
 		#Get Win32 constants and functions
@@ -1402,7 +1429,7 @@ $RemoteScriptBlock = {
 		
 		#Now that the DLL is in memory, get more detailed information about it
 		Write-Debug "Getting detailed Dll information from the headers loaded in memory"
-		$DllInfo = Get-DllDetailedInfo -DllHandle $DllHandle -Win32Types $Win32Types
+		$DllInfo = Get-DllDetailedInfo -DllHandle $DllHandle -Win32Types $Win32Types -Win32Constants $Win32Constants
 		$DllInfo | Add-Member -MemberType NoteProperty -Name EndAddress -Value $DllEndAddress
 		
 		
@@ -1426,13 +1453,54 @@ $RemoteScriptBlock = {
 		Update-MemoryProtectionFlags -DllInfo $DllInfo -Win32Functions $Win32Functions -Win32Constants $Win32Constants -Win32Types $Win32Types
 		
 		
-		#Call DllMain so the DLL knows it has been loaded
-		Write-Debug "Calling dllmain so the DLL knows it has been loaded"
-		$DllMainPtr = Add-SignedIntAsUnsigned ($DllInfo.DllHandle) ($DllInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
-		$DllMainDelegate = Get-DelegateType @([IntPtr], [UInt32], [IntPtr]) ([Bool])
-		$DllMain = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($DllMainPtr, $DllMainDelegate)
-		
-		$DllMain.Invoke($DllInfo.DllHandle, 1, [IntPtr]::Zero) | Out-Null
+		#Call the entry point, if this is a DLL the entrypoint is the DllMain function, if it is an EXE it is the Main function
+		if ($DllInfo.FileType -ieq "DLL")
+		{
+			Write-Debug "Calling dllmain so the DLL knows it has been loaded"
+			$DllMainPtr = Add-SignedIntAsUnsigned ($DllInfo.DllHandle) ($DllInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
+			$DllMainDelegate = Get-DelegateType @([IntPtr], [UInt32], [IntPtr]) ([Bool])
+			$DllMain = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($DllMainPtr, $DllMainDelegate)
+			
+			$DllMain.Invoke($DllInfo.DllHandle, 1, [IntPtr]::Zero) | Out-Null
+		}
+		elseif ($DllInfo.FileType -ieq "EXE")
+		{
+			Write-Debug "Call EXE Main function"
+			
+			[Int32]$Argc = 1
+			[IntPtr]$Argv = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni("ReflectiveExe")
+			
+#			if ($ExeArgs -eq $null)
+#			{
+#				$Argv = [System.Runtime.InteropServices.Marshal]::AllocHGlobal([System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr]) * $Argc)
+#				[IntPtr]$StrPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalAnsi("ReflectiveExe")
+#				Write-Debug "StrPtr: $StrPtr"
+#				Write-Debug "Argv address: $Argv"
+#				[System.Runtime.InteropServices.Marshal]::StructureToPtr($StrPtr, $Argv, $false)
+#			}
+#			elseif ($ExeArgs -ne $null)
+#			{
+#				#Create the argv array for the main function
+#				$Argc = $ExeArgs.Length + 1
+#				$Argv = [System.Runtime.InteropServices.Marshal]::AllocHGlobal([System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr]) * $Argc)
+#				[IntPtr]$StrPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalAuto("ReflectiveExe")
+#				[IntPtr]$ArgvPtr = $Argv
+#				[System.Runtime.InteropServices.Marshal]::StructureToPtr($StrPtr, $ArgvPtr, $false)
+#				for ($i = 0; $i -lt $ExeArgs.Length; $i++)
+#				{
+#					$ArgvPtr = [IntPtr](Add-SignedIntAsUnsigned ($ArgvPtr) ([System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr])))
+#					$StrPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalAuto($ExeArgs[$i])
+#					[System.Runtime.InteropServices.Marshal]::StructureToPtr($StrPtr, $ArgvPtr, $false)
+#				}
+#			}
+			
+			$ExeMainPtr = Add-SignedIntAsUnsigned ($DllInfo.DllHandle) ($DllInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
+			$ExeMainDelegate = Get-DelegateType @() ([Int32])
+			$ExeMain = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($ExeMainPtr, $ExeMainDelegate)
+			$TODOTemp = "AAAAAAAAAAAAAAA"
+			$ReturnValue = $ExeMain.Invoke()
+			Write-Output "Return value: $ReturnValue"
+		}
 		
 		return ($DllInfo.DllHandle)
 	}
@@ -1444,7 +1512,7 @@ $RemoteScriptBlock = {
 		
 		#Load the DLL reflectively
 		Write-Debug "Calling Invoke-MemoryLoadLibrary"
-		$DllHandle = Invoke-MemoryLoadLibrary -DllBytes $DllBytes
+		$DllHandle = Invoke-MemoryLoadLibrary -DllBytes $DllBytes -ExeArgs $ExeArgs
 		if ($DllHandle -eq [IntPtr]::Zero)
 		{
 			Throw "Unable to load DLL, handle returned is NULL"
