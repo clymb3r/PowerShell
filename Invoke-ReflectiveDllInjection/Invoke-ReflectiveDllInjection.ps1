@@ -23,6 +23,10 @@ Reflectively loads a DLL in to the powershell process.
 
 The path of the DLL to load and execute a function from.
 
+.PARAMETER DllUrl
+
+A URL to download the DLL from
+
 .PARAMETER ComputerName
 
 Optional, an array of computernames to run the script on
