@@ -837,6 +837,7 @@ $RemoteScriptBlock = {
 		$NtHeadersInfo = New-Object System.Object
 		
 		#Normally would validate DOSHeader here, but we did it before this function was called and then destroyed 'MZ' for sneakiness
+		$dosHeader = [System.Runtime.InteropServices.Marshal]::PtrToStructure($DllHandle, $Win32Types.IMAGE_DOS_HEADER)
 		
 		#Get IMAGE_NT_HEADERS
 		[IntPtr]$NtHeadersPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$DllHandle) ([Int64][UInt64]$dosHeader.e_lfanew))
