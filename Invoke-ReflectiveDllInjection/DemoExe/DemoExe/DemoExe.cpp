@@ -2,7 +2,10 @@
 //
 
 #include "stdafx.h"
+#include <process.h>
+#include <windows.h>
 
+EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 
 int _tmain(int argc, _TCHAR* argv[])
 {
@@ -16,7 +19,14 @@ int _tmain(int argc, _TCHAR* argv[])
 		wprintf(L"Argv: %s\n", argv[i]);
 	}
 
-	wprintf(L"GetCommandLine: %s\n", GetCommandLine());
+	printf("DosHeaderMagic: %d\n", __ImageBase.e_magic); 
+	printf("__ImageBase: %d\n", &__ImageBase);
+
+	DWORD old = 0;
+	VirtualProtect(&__ImageBase, 2, PAGE_EXECUTE_READWRITE, &old);
+	__ImageBase.e_magic = 0;
+	printf("Updated DosHeaderMagic: %d\n", __ImageBase.e_magic); 
+	//wprintf(L"GetCommandLine: %s\n", GetCommandLine());
 
 	return 0;
 }
