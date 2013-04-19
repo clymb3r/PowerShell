@@ -473,6 +473,8 @@ $RemoteScriptBlock = {
 		$Win32Constants | Add-Member -MemberType NoteProperty -Name MEM_DECOMMIT -Value 0x4000
 		$Win32Constants | Add-Member -MemberType NoteProperty -Name IMAGE_FILE_EXECUTABLE_IMAGE -Value 0x0002
 		$Win32Constants | Add-Member -MemberType NoteProperty -Name IMAGE_FILE_DLL -Value 0x2000
+		$Win32Constants | Add-Member -MemberType NoteProperty -Name IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE -Value 0x40
+		$Win32Constants | Add-Member -MemberType NoteProperty -Name IMAGE_DLLCHARACTERISTICS_NX_COMPAT -Value 0x100
 		
 		return $Win32Constants
 	}
@@ -946,6 +948,7 @@ $RemoteScriptBlock = {
 		$PEInfo | Add-Member -MemberType NoteProperty -Name 'OriginalImageBase' -Value ($NtHeadersInfo.IMAGE_NT_HEADERS.OptionalHeader.ImageBase)
 		$PEInfo | Add-Member -MemberType NoteProperty -Name 'SizeOfImage' -Value ($NtHeadersInfo.IMAGE_NT_HEADERS.OptionalHeader.SizeOfImage)
 		$PEInfo | Add-Member -MemberType NoteProperty -Name 'SizeOfHeaders' -Value ($NtHeadersInfo.IMAGE_NT_HEADERS.OptionalHeader.SizeOfHeaders)
+		$PEInfo | Add-Member -MemberType NoteProperty -Name 'DllCharacteristics' -Value ($NtHeadersInfo.IMAGE_NT_HEADERS.OptionalHeader.DllCharacteristics)
 		
 		#Free the memory allocated above, this isn't where we allocate the PE to memory
 		[System.Runtime.InteropServices.Marshal]::FreeHGlobal($UnmanagedPEBytes)
@@ -1239,22 +1242,50 @@ $RemoteScriptBlock = {
 					#Compare thunkRefVal to IMAGE_ORDINAL_FLAG, which is defined as 0x80000000 or 0x8000000000000000 depending on 32bit or 64bit
 					#	If the top bit is set on an int, it will be negative, so instead of worrying about casting this to uint
 					#	and doing the comparison, just see if it is less than 0
+					[IntPtr]$NewThunkRef = [IntPtr]::Zero
 					if([Int64]$ThunkRefVal -lt 0)
 					{
-						$IMAGE_ORDINAL = 0xFFFF
-						$ProcedureName = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi(([Int64]$ThunkRefVal -band $IMAGE_ORDINAL))
+						if ($PEInfo.PE64Bit -eq $true)
+						{
+							[IntPtr]$FuncOrdinal = [Int64]$ThunkRefVal -band 0x7fffffffffffffff
+						}
+						else
+						{
+							[IntPtr]$FuncOrdinal = [Int64]$ThunkRefVal -band 0x7fffffff
+						}
+						
+						$DllInfo = Get-PEDetailedInfo -PEHandle $ImportDllHandle -Win32Types $Win32Types -Win32Constants $Win32Constants
+						
+						#Get the export table, and get the function address from the DLL's export table based on the ordinal supplied
+						if ($DllInfo.IMAGE_NT_HEADERS.OptionalHeader.ExportTable.Size -eq 0)
+						{
+							Throw "Error no exports found in DLL being loaded for PE file"
+						}
+						
+						$ExportTablePtr = Add-SignedIntAsUnsigned ($ImportDllHandle) ($DllInfo.IMAGE_NT_HEADERS.OptionalHeader.ExportTable.VirtualAddress)
+						$ExportTable = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ExportTablePtr, $Win32Types.IMAGE_EXPORT_DIRECTORY)
+						 
+						$FinalOrdinal = [Int64]$FuncOrdinal - $ExportTable.Base
+						if ($FinalOrdinal -gt 0xffff)
+						{
+							Throw "Error, getting export by ordinal but ordinal is greater than 0xffff"
+						}
+						
+						$FuncOffsetAddr = Add-SignedIntAsUnsigned ($ImportDllHandle) ($ExportTable.AddressOfFunctions + ($FinalOrdinal * [System.Runtime.InteropServices.Marshal]::SizeOf([UInt32])))
+						$FuncOffset = [System.Runtime.InteropServices.Marshal]::PtrToStructure($FuncOffsetAddr, [UInt32])
+						[IntPtr]$NewThunkRef = Add-SignedIntAsUnsigned ($ImportDllHandle) ($FuncOffset)
 					}
 					else
 					{
 						$StringAddr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($ThunkRefVal)
 						$StringAddr = Add-SignedIntAsUnsigned ($StringAddr) ([System.Runtime.InteropServices.Marshal]::SizeOf([UInt16]))
 						$ProcedureName = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($StringAddr)
+						[IntPtr]$NewThunkRef = $Win32Functions.GetProcAddress.Invoke($ImportDllHandle, $ProcedureName)
 					}
 					
-					[IntPtr]$NewThunkRef = $Win32Functions.GetProcAddress.Invoke($ImportDllHandle, $ProcedureName)
-					if ($NewThunkRef -eq $null)
+					if ($NewThunkRef -eq $null -or $NewThunkRef -eq [IntPtr]::Zero)
 					{
-						Throw "New function reference is null, this is almost certainly a bug in this script"
+						Throw "New function reference is null, this is almost certainly a bug in this script. Function: $ProcedureName"
 					}
 					
 					[System.Runtime.InteropServices.Marshal]::StructureToPtr($NewThunkRef, $ThunkRef, $false)
@@ -1665,6 +1696,11 @@ $RemoteScriptBlock = {
 		Write-Verbose "Getting basic PE information from the file"
 		$PEInfo = Get-PEBasicInfo -PEBytes $PEBytes -Win32Types $Win32Types
 		$OriginalImageBase = $PEInfo.OriginalImageBase
+		$NXCompatible = $true
+		if ($PEInfo.DllCharacteristics -band $Win32Constants.IMAGE_DLLCHARACTERISTICS_NX_COMPAT -ne $Win32Constants.IMAGE_DLLCHARACTERISTICS_NX_COMPAT)
+		{
+			$NXCompatible = $false
+		}	
 		
 		
 		#Verify that the PE and the current process are the same bits (32bit or 64bit)
@@ -1681,7 +1717,15 @@ $RemoteScriptBlock = {
 
 		#Allocate memory and write the PE to memory. Always allocating to random memory address so I have pretend ASLR
 		Write-Verbose "Allocating memory for the PE and write its headers to memory"
-		$PEHandle = $Win32Functions.VirtualAlloc.Invoke([IntPtr]::Zero, [UIntPtr]$PEInfo.SizeOfImage, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
+		
+		[IntPtr]$LoadAddr = [IntPtr]::Zero
+		if ($PEInfo.DllCharacteristics -band $Win32Constants.IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE -ne $Win32Constants.IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE)
+		{
+			Write-Warning "PE file being reflectively loaded is not ASLR compatible. If the loading fails, try restarting PowerShell and trying again"
+			[IntPtr]$LoadAddr = $OriginalImageBase
+		}
+		
+		$PEHandle = $Win32Functions.VirtualAlloc.Invoke($LoadAddr, [UIntPtr]$PEInfo.SizeOfImage, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
 
 		[IntPtr]$PEEndAddress = Add-SignedIntAsUnsigned ($PEHandle) ([Int64]$PEInfo.SizeOfImage)
 		if ($PEHandle -eq [IntPtr]::Zero)
@@ -1714,8 +1758,15 @@ $RemoteScriptBlock = {
 		
 		
 		#Update the memory protection flags for all the memory just allocated
-		Write-Verbose "Update memory protection flags"
-		Update-MemoryProtectionFlags -PEInfo $PEInfo -Win32Functions $Win32Functions -Win32Constants $Win32Constants -Win32Types $Win32Types
+		if ($NXCompatible -eq $true)
+		{
+			Write-Verbose "Update memory protection flags"
+			Update-MemoryProtectionFlags -PEInfo $PEInfo -Win32Functions $Win32Functions -Win32Constants $Win32Constants -Win32Types $Win32Types
+		}
+		else
+		{
+			Write-Verbose "PE being reflectively loaded is not compatible with NX memory, keeping memory as read write execute"
+		}
 		
 		
 		#Call the entry point, if this is a DLL the entrypoint is the DllMain function, if it is an EXE it is the Main function
