@@ -4,6 +4,9 @@
 #include "stdafx.h"
 #include <process.h>
 #include <windows.h>
+#include <iostream>
+
+using namespace std;
 
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 
@@ -18,6 +21,8 @@ int _tmain(int argc, _TCHAR* argv[])
 	{
 		wprintf(L"Argv: %s\n", argv[i]);
 	}
+
+	exit(-1);
 
 	return 0;
 }

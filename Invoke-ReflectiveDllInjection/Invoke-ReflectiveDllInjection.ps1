@@ -1287,7 +1287,7 @@ $RemoteScriptBlock = {
 					{
 						Throw "New function reference is null, this is almost certainly a bug in this script. Function: $ProcedureName"
 					}
-					
+
 					[System.Runtime.InteropServices.Marshal]::StructureToPtr($NewThunkRef, $ThunkRef, $false)
 					
 					$ThunkRef = Add-SignedIntAsUnsigned ([Int64]$ThunkRef) ([System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr]))
@@ -1515,77 +1515,81 @@ $RemoteScriptBlock = {
 		
 		#First overwrite CorExitProcess with a return instruction, this seems to work fine.
 		#Because this process is being loaded in the PowerShell process, code compiled in VisualStudio will always detect it it loaded
-		#	in a managed process and call CorExitProcess. We need to stop this.
+
+
+		$ReturnArray = @()
+		$ExitFunctions = @() #Array of functions to overwrite so the thread doesn't exit the process
+		
+		#CorExitProcess (compiled in to visual studio c++)
 		[IntPtr]$MscoreeHandle = $Win32Functions.GetModuleHandle.Invoke("mscoree.dll")
 		if ($MscoreeHandle -eq [IntPtr]::Zero)
 		{
 			throw "mscoree handle null"
 		}
 		[IntPtr]$CorExitProcessAddr = $Win32Functions.GetProcAddress.Invoke($MscoreeHandle, "CorExitProcess")
-		
-		#Make copy of original CorExitProcess bytes
-		$CorExitProcessOrigBytesPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal(1)
-		$Win32Functions.memcpy.Invoke($CorExitProcessOrigBytesPtr, $CorExitProcessAddr, [UInt64]1) | Out-Null
-		$ReturnArray += ,($CorExitProcessAddr, $CorExitProcessOrigBytesPtr, 1)
-		
-		$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($CorExitProcessAddr, [UInt32]1, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
-		if ($Success -eq $false)
+		if ($CorExitProcessAddr -eq [IntPtr]::Zero)
 		{
-			Throw "Call to VirtualProtect failed"
+			Throw "CorExitProcess address not found"
 		}
-		[System.Runtime.InteropServices.Marshal]::WriteByte($CorExitProcessAddr, 0, [Byte]0xc3)
-		Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($CorExitProcessAddr, [UInt32]1, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
-
+		$ExitFunctions += $CorExitProcessAddr
 		
-		#Next overwrite ExitProcess, this is more involved. The following is the shellcode:
-		#32bit shellcode
-		[Byte[]]$Shellcode1 = @(0xbb)
-		[Byte[]]$Shellcode2 = @(0xc6, 0x03, 0x01, 0x83, 0xec, 0x20, 0x66, 0x81, 0xe4, 0x00, 0xff, 0xbb)
-		#64bit shellcode
-		if ($PtrSize -eq 8)
-		{
-			[Byte[]]$Shellcode1 = @(0x48, 0xbb)
-			[Byte[]]$Shellcode2 = @(0xc6, 0x03, 0x01, 0x48, 0x83, 0xec, 0x20, 0x66, 0x81, 0xe4, 0x00, 0xff, 0x48, 0xbb)
-		}
-		[Byte[]]$Shellcode3 = @(0xff, 0xd3)
-		$TotalSize = $Shellcode1.Length + $PtrSize + $Shellcode2.Length + $PtrSize + $Shellcode3.Length
-		
+		#ExitProcess (what non-managed programs use)
 		[IntPtr]$ExitProcessAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "ExitProcess")
 		if ($ExitProcessAddr -eq [IntPtr]::Zero)
 		{
 			Throw "ExitProcess address not found"
 		}
-		[IntPtr]$ExitThreadAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "ExitThread")
-		if ($ExitThreadAddr -eq [IntPtr]::Zero)
+		$ExitFunctions += $ExitProcessAddr
+		
+		[UInt32]$OldProtectFlag = 0
+		foreach ($ProcExitFunctionAddr in $ExitFunctions)
 		{
-			Throw "ExitThread address not found"
+			$ProcExitFunctionAddrTmp = $ProcExitFunctionAddr
+			#Next overwrite ExitProcess, this is more involved. The following is the shellcode:
+			#32bit shellcode
+			[Byte[]]$Shellcode1 = @(0xbb)
+			[Byte[]]$Shellcode2 = @(0xc6, 0x03, 0x01, 0x83, 0xec, 0x20, 0x66, 0x81, 0xe4, 0x00, 0xff, 0xbb)
+			#64bit shellcode
+			if ($PtrSize -eq 8)
+			{
+				[Byte[]]$Shellcode1 = @(0x48, 0xbb)
+				[Byte[]]$Shellcode2 = @(0xc6, 0x03, 0x01, 0x48, 0x83, 0xec, 0x20, 0x66, 0x81, 0xe4, 0x00, 0xff, 0x48, 0xbb)
+			}
+			[Byte[]]$Shellcode3 = @(0xff, 0xd3)
+			$TotalSize = $Shellcode1.Length + $PtrSize + $Shellcode2.Length + $PtrSize + $Shellcode3.Length
+			
+			[IntPtr]$ExitThreadAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "ExitThread")
+			if ($ExitThreadAddr -eq [IntPtr]::Zero)
+			{
+				Throw "ExitThread address not found"
+			}
+
+			$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($ProcExitFunctionAddr, [UInt32]$TotalSize, [UInt32]$Win32Constants.PAGE_EXECUTE_READWRITE, [Ref]$OldProtectFlag)
+			if ($Success -eq $false)
+			{
+				Throw "Call to VirtualProtect failed"
+			}
+			
+			#Make copy of original ExitProcess bytes
+			$ExitProcessOrigBytesPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TotalSize)
+			$Win32Functions.memcpy.Invoke($ExitProcessOrigBytesPtr, $ProcExitFunctionAddr, [UInt64]$TotalSize) | Out-Null
+			$ReturnArray += ,($ProcExitFunctionAddr, $ExitProcessOrigBytesPtr, $TotalSize)
+			
+			#Write the ExitThread shellcode to memory. This shellcode will write 0x01 to ExeDoneBytePtr address (so PS knows the EXE is done), then 
+			#	call ExitThread
+			Write-BytesToMemory -Bytes $Shellcode1 -MemoryAddress $ProcExitFunctionAddrTmp
+			$ProcExitFunctionAddrTmp = Add-SignedIntAsUnsigned $ProcExitFunctionAddrTmp ($Shellcode1.Length)
+			[System.Runtime.InteropServices.Marshal]::StructureToPtr($ExeDoneBytePtr, $ProcExitFunctionAddrTmp, $false)
+			$ProcExitFunctionAddrTmp = Add-SignedIntAsUnsigned $ProcExitFunctionAddrTmp $PtrSize
+			Write-BytesToMemory -Bytes $Shellcode2 -MemoryAddress $ProcExitFunctionAddrTmp
+			$ProcExitFunctionAddrTmp = Add-SignedIntAsUnsigned $ProcExitFunctionAddrTmp ($Shellcode2.Length)
+			[System.Runtime.InteropServices.Marshal]::StructureToPtr($ExitThreadAddr, $ProcExitFunctionAddrTmp, $false)
+			$ProcExitFunctionAddrTmp = Add-SignedIntAsUnsigned $ProcExitFunctionAddrTmp $PtrSize
+			Write-BytesToMemory -Bytes $Shellcode3 -MemoryAddress $ProcExitFunctionAddrTmp
+
+			Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($ProcExitFunctionAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
 		}
-		$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($ExitProcessAddr, [UInt32]$TotalSize, [UInt32]$Win32Constants.PAGE_EXECUTE_READWRITE, [Ref]$OldProtectFlag)
-		if ($Success -eq $false)
-		{
-			Throw "Call to VirtualProtect failed"
-		}
-		
-		#Make copy of original ExitProcess bytes
-		$ExitProcessOrigBytesPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TotalSize)
-		$Win32Functions.memcpy.Invoke($ExitProcessOrigBytesPtr, $ExitProcessAddr, [UInt64]$TotalSize) | Out-Null
-		$ReturnArray += ,($ExitProcessAddr, $ExitProcessOrigBytesPtr, $TotalSize)
-		
-		#Write the ExitThread shellcode to memory. This shellcode will write 0x01 to ExeDoneBytePtr address (so PS knows the EXE is done), then 
-		#	call ExitThread
-		Write-BytesToMemory -Bytes $Shellcode1 -MemoryAddress $ExitProcessAddr
-		$ExitProcessAddr = Add-SignedIntAsUnsigned $ExitProcessAddr ($Shellcode1.Length)
-		[System.Runtime.InteropServices.Marshal]::StructureToPtr($ExeDoneBytePtr, $ExitProcessAddr, $false)
-		$ExitProcessAddr = Add-SignedIntAsUnsigned $ExitProcessAddr $PtrSize
-		Write-BytesToMemory -Bytes $Shellcode2 -MemoryAddress $ExitProcessAddr
-		$ExitProcessAddr = Add-SignedIntAsUnsigned $ExitProcessAddr ($Shellcode2.Length)
-		[System.Runtime.InteropServices.Marshal]::StructureToPtr($ExitThreadAddr, $ExitProcessAddr, $false)
-		$ExitProcessAddr = Add-SignedIntAsUnsigned $ExitProcessAddr $PtrSize
-		Write-BytesToMemory -Bytes $Shellcode3 -MemoryAddress $ExitProcessAddr
-		
-		Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($ExitProcessAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
 		#################################################
-		
 		Write-Output $ReturnArray
 	}
 	
@@ -1700,7 +1704,7 @@ $RemoteScriptBlock = {
 		if ($PEInfo.DllCharacteristics -band $Win32Constants.IMAGE_DLLCHARACTERISTICS_NX_COMPAT -ne $Win32Constants.IMAGE_DLLCHARACTERISTICS_NX_COMPAT)
 		{
 			$NXCompatible = $false
-		}	
+		}
 		
 		
 		#Verify that the PE and the current process are the same bits (32bit or 64bit)
@@ -1724,7 +1728,7 @@ $RemoteScriptBlock = {
 			Write-Warning "PE file being reflectively loaded is not ASLR compatible. If the loading fails, try restarting PowerShell and trying again"
 			[IntPtr]$LoadAddr = $OriginalImageBase
 		}
-		
+		#todo: Need to set this readwriteexecute if no support for nx
 		$PEHandle = $Win32Functions.VirtualAlloc.Invoke($LoadAddr, [UIntPtr]$PEInfo.SizeOfImage, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
 
 		[IntPtr]$PEEndAddress = Add-SignedIntAsUnsigned ($PEHandle) ([Int64]$PEInfo.SizeOfImage)
@@ -1732,7 +1736,7 @@ $RemoteScriptBlock = {
 		{ 
 			Throw "VirtualAlloc failed to allocate memory."
 		}
-		
+		Write-Verbose "PEHandle: $PEHandle, EndAddr: $PEEndAddress" #todo delete		
 		[System.Runtime.InteropServices.Marshal]::Copy($PEBytes, 0, $PEHandle, $PEInfo.SizeOfHeaders) | Out-Null
 		
 		
@@ -1894,6 +1898,9 @@ $RemoteScriptBlock = {
 #Main function to either run the script locally or remotely
 Function Main
 {
+	[System.Diagnostics.Process]::GetCurrentProcess() | Select-Object id
+	Read-Host "Enter to continue"
+	
 	[Byte[]]$PEBytes = $null
 	
 	if ($PsCmdlet.ParameterSetName -ieq "LocalFile")
