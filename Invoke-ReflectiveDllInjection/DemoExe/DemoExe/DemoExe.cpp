@@ -22,7 +22,11 @@ int _tmain(int argc, _TCHAR* argv[])
 		wprintf(L"Argv: %s\n", argv[i]);
 	}
 
-	exit(-1);
+	//printf("gca: %d\n", GetCommandLineA);
+	//printf("gcw: %d\n", GetCommandLineW);
+	//printf("gc:  %d\n", GetCommandLine);
+	//printf("getcommandlinea: %s\n", GetCommandLineA());
+	//wprintf(L"getcommandline: %ls \n", GetCommandLine());
 
 	return 0;
 }

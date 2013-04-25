@@ -1,0 +1,153 @@
+Microsoft (R) COFF/PE Dumper Version 11.00.51106.1
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file c:\windows\system32\mscoree.dll
+
+File Type: DLL
+
+  Section contains the following exports for mscoree.dll
+
+    00000000 characteristics
+    4F7D11F5 time date stamp Wed Apr 04 20:31:01 2012
+        0.00 version
+          17 ordinal base
+         126 number of functions
+         123 number of names
+
+    ordinal hint RVA      name
+
+         38    0 0001A7B8 CLRCreateInstance
+         39    1 00017784 CallFunctionShim
+         21    2 00019008 CloseCtrs
+         40    3 00016508 ClrCreateManagedInstance
+         41    4 0001640C CoEEShutDownCOM
+         42    5 00015E30 CoInitializeCor
+         43    6 00015C24 CoInitializeEE
+         44    7 00015F34 CoUninitializeCor
+         45    8 00015D28 CoUninitializeEE
+         25    9 00018EF0 CollectCtrs
+         46    A 00017344 CorBindToCurrentRuntime
+         47    B 00016EA8 CorBindToRuntime
+         48    C 00016D44 CorBindToRuntimeByCfg
+         49    D 000188A4 CorBindToRuntimeByPath
+         50    E 0001898C CorBindToRuntimeByPathEx
+         51    F 00017008 CorBindToRuntimeEx
+         52   10 00017188 CorBindToRuntimeHost
+         26   11 0000BCE4 CorDllMainWorker
+         53   12 00017D20 CorExitProcess
+         54   13 00018BA0 CorGetSvc
+         55   14 00018C74 CorIsLatestSvc
+         56   15 00016638 CorMarkThreadInThreadPool
+         57   16 00018D5C CorTickleSvc
+         58   17 00001600 CreateConfigStream
+         59   18 00017574 CreateDebuggingInterfaceFromVersion
+         60   19 0001A728 CreateInterface
+         61   1A 000134FC DllCanUnloadNow
+         62   1B 00013400 DllGetClassObject
+         63   1C 000135F8 DllRegisterServer
+         64   1D 0001373C DllUnregisterServer
+         27   1E 00019D50 EEDllGetClassObjectFromClass
+         65   1F 00019A14 EEDllRegisterServer
+         66   20 00019B1C EEDllUnregisterServer
+         67   21 00019C24 GetAssemblyMDImport
+         68   22 0001A6A8 GetCLRMetaHost
+         69   23 000167E8 GetCORRequiredVersion
+         70   24 000187AC GetCORRootDirectory
+         71   25 00008628 GetCORSystemDirectory
+         72   26 00008920 GetCORVersion
+         73   27 00016310 GetCompileInfo
+         74   28 000132E8 GetFileVersion
+         75   29 00013984 GetHashFromAssemblyFile
+         76   2A 00013B04 GetHashFromAssemblyFileW
+         77   2B 00013C84 GetHashFromBlob
+         78   2C 00013E28 GetHashFromFile
+         79   2D 00013FA8 GetHashFromFileW
+         80   2E 00014128 GetHashFromHandle
+         81   2F 00008A9C GetHostConfigurationFile
+         82   30 0000171C GetMetaDataInternalInterface
+         83   31 00019338 GetMetaDataInternalInterfaceFromPublic
+         84   32 0001920C GetMetaDataPublicInterfaceFromInternal
+         85   33 00019884 GetPermissionRequests
+         28   34 000166EC GetPrivateContextsPerfCounters
+         29   35 00008A58 GetProcessExecutableHeap
+         86   36 00017930 GetRealProcAddress
+         87   37 000168E0 GetRequestedRuntimeInfo
+         88   38 00016AFC GetRequestedRuntimeVersion
+         89   39 00016C14 GetRequestedRuntimeVersionForCLSID
+         30   3A 00008A14 GetStartupFlags
+         31   3B 00013160 GetTargetForVTableEntry
+         32   3C 00012EFC GetTokenForVTableEntry
+         90   3D 0001766C GetVersionFromProcess
+         91   3E 00017A54 GetXMLElement
+         92   3F 00017B40 GetXMLElementAttribute
+         93   40 00017C4C GetXMLObject
+         94   41 00008990 IEE
+         17   42 0001817C InitErrors
+         19   43 0001828C InitSSAutoEnterThread
+         95   44 00008D98 LoadLibraryShim
+         96   45 00018A88 LoadLibraryWithPolicyShim
+         22   46 00016030 LoadStringRC
+         97   47 00016170 LoadStringRCEx
+         98   48 00021598 LockClrVersion
+         33   49 00018488 LogHelp_LogAssert
+         34   4A 000185B4 LogHelp_NoGuiOnAssert
+         35   4B 000186B0 LogHelp_TerminateOnAssert
+         99   4C 000190E0 MetaDataGetDispenser
+        100   4D 0001A310 ND_CopyObjDst
+        101   4E 0001A200 ND_CopyObjSrc
+        102   4F 000014D0 ND_RI2
+        103   50 00019E5C ND_RI4
+        104   51 00019F38 ND_RI8
+        105   52 00007228 ND_RU1
+        106   53 0001A020 ND_WI2
+        107   54 00001558 ND_WI4
+        108   55 0001A10C ND_WI8
+        109   56 0000727C ND_WU1
+         36   57 00018E1C OpenCtrs
+         18   58 0001A420 PostError
+         23   59 00019464 ReOpenMetaDataWithMemory
+        110   5A 00019590 ReOpenMetaDataWithMemoryEx
+        111   5B 0001745C RunDll32ShimW
+        112   5C 00018060 RuntimeOSHandle
+        113   5D 00017E34 RuntimeOpenImage
+        114   5E 00017F50 RuntimeReleaseHandle
+         37   5F 00013034 SetTargetForVTableEntry
+        115   60 000142A8 StrongNameCompareAssemblies
+        116   61 00013880 StrongNameErrorInfo
+        117   62 000143E8 StrongNameFreeBuffer
+        118   63 00014538 StrongNameGetBlob
+        119   64 00014678 StrongNameGetBlobFromImage
+        120   65 000147D0 StrongNameGetPublicKey
+        121   66 00014968 StrongNameHashSize
+        122   67 00014A8C StrongNameKeyDelete
+        123   68 00014BA0 StrongNameKeyGen
+        124   69 00014CF8 StrongNameKeyGenEx
+        125   6A 00014E8C StrongNameKeyInstall
+        126   6B 00014FCC StrongNameSignatureGeneration
+        127   6C 000151A8 StrongNameSignatureGenerationEx
+        128   6D 0001532C StrongNameSignatureSize
+        129   6E 00015468 StrongNameSignatureVerification
+        130   6F 000155A4 StrongNameSignatureVerificationEx
+        131   70 000156E4 StrongNameSignatureVerificationFromImage
+        132   71 0001583C StrongNameTokenFromAssembly
+        133   72 0001597C StrongNameTokenFromAssemblyEx
+        134   73 00015B14 StrongNameTokenFromPublicKey
+        135   74 000196D4 TranslateSecurityAttributes
+         20   75 00018390 UpdateError
+        136   76 00013298 _CorDllMain
+        137   77 00005AB8 _CorExeMain
+        138   78 0001A520 _CorExeMain2
+        139   79 00003C80 _CorImageUnloading
+        140   7A 00002460 _CorValidateImage
+         24      0000711C [NONAME]
+        142      00012E10 [NONAME]
+
+  Summary
+
+        5000 .data
+        8000 .pdata
+       18000 .rdata
+        1000 .reloc
+        1000 .rsrc
+       47000 .text

