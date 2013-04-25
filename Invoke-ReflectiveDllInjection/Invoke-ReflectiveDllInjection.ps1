@@ -1445,6 +1445,13 @@ $RemoteScriptBlock = {
 		
 		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr])
 		$OldProtectFlag = 0
+		
+		[IntPtr]$Kernel32Handle = $Win32Functions.GetModuleHandle.Invoke("Kernel32.dll")
+		if ($Kernel32Handle -eq [IntPtr]::Zero)
+		{
+			throw "Kernel32 handle null"
+		}
+
 		#################################################
 		#First overwrite the GetCommandLine() function. This is the function that is called by a new process to get the command line args used to start it.
 		#	We overwrite it with shellcode to return a pointer to the string ExeArguments, allowing us to pass the exe any args we want.
@@ -1456,17 +1463,53 @@ $RemoteScriptBlock = {
 		{
 			throw "Kernel32 handle null"
 		}
+		
+		#todo: need to be adjusted for x64 as well, currently add 2 to mem is for x86
 		[IntPtr]$GetCommandLineAAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "GetCommandLineA")
 		$GetCommandLineAAddr = Add-SignedIntAsUnsigned $GetCommandLineAAddr 2
+		
+		$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineAAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+		if ($Success = $false)
+		{
+			throw "Call to VirtualProtect failed"
+		}
+		[IntPtr]$OldAddr = $GetCommandLineAAddr
 		[IntPtr]$GetCommandLineAAddr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($GetCommandLineAAddr, [IntPtr])
+		Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($OldAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
 		Write-Verbose "hi"
+		
+		$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineAAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+		if ($Success = $false)
+		{
+			throw "Call to VirtualProtect failed"
+		}
+		[IntPtr]$OldAddr = $GetCommandLineAAddr
 		[IntPtr]$GetCommandLineAAddr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($GetCommandLineAAddr, [IntPtr])
+		Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($OldAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
 		Write-Verbose "hi2"
+		
+		
 		[IntPtr]$GetCommandLineWAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "GetCommandLineW")
 		$GetCommandLineWAddr = Add-SignedIntAsUnsigned $GetCommandLineWAddr 2
+		
+		$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineWAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+		if ($Success = $false)
+		{
+			throw "Call to VirtualProtect failed"
+		}
+		[IntPtr]$OldAddr = $GetCommandLineWAddr
 		[IntPtr]$GetCommandLineWAddr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($GetCommandLineWAddr, [IntPtr])
+		Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($OldAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
 		Write-Verbose "hi3"
+		
+		$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineWAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+		if ($Success = $false)
+		{
+			throw "Call to VirtualProtect failed"
+		}
+		[IntPtr]$OldAddr = $GetCommandLineWAddr
 		[IntPtr]$GetCommandLineWAddr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($GetCommandLineWAddr, [IntPtr])
+		Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($OldAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
 		Write-Verbose "hi4"
 		if ($GetCommandLineAAddr -eq [IntPtr]::Zero -or $GetCommandLineWAddr -eq [IntPtr]::Zero)
 		{
@@ -1537,7 +1580,8 @@ $RemoteScriptBlock = {
 		#	I don't know why exactly.. But the msvcr DLL that a "DLL" compiled executable imports has an export called _acmdln and _wcmdln.
 		#	It appears to call GetCommandLine and store the result in this var. Then when you call __wgetcmdln it parses and returns the
 		#	argv and argc values stored in these variables. So the wasy thing to do is just overwrite the variable since it is exported.
-		$DllList = @("msvcr70d.dll", "msvcr71d.dll", "msvcr80d.dll", "msvcr90d.dll", "msvcr100d.dll", "msvcr110d.dll")
+		$DllList = @("msvcr70d.dll", "msvcr71d.dll", "msvcr80d.dll", "msvcr90d.dll", "msvcr100d.dll", "msvcr110d.dll", "msvcr70.dll" `
+			, "msvcr71.dll", "msvcr80.dll", "msvcr90.dll", "msvcr100.dll", "msvcr110.dll")
 		
 		foreach ($Dll in $DllList)
 		{
