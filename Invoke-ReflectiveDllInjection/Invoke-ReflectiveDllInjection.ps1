@@ -1282,12 +1282,6 @@ $RemoteScriptBlock = {
 						$StringAddr = Add-SignedIntAsUnsigned $StringAddr ([System.Runtime.InteropServices.Marshal]::SizeOf([UInt16]))
 						$ProcedureName = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($StringAddr)
 						[IntPtr]$NewThunkRef = $Win32Functions.GetProcAddress.Invoke($ImportDllHandle, $ProcedureName)
-						
-						#todo delete
-						if ($ProcedureName -ieq "GetCommandLineA" -or $ProcedureName -ieq "GetCommandLineW")
-						{
-							Write-Verbose "todo: $ProcedureName : $NewThunkRef"
-						}
 					}
 					
 					if ($NewThunkRef -eq $null -or $NewThunkRef -eq [IntPtr]::Zero)
@@ -1464,60 +1458,14 @@ $RemoteScriptBlock = {
 			throw "Kernel32 handle null"
 		}
 		
-		#todo: need to be adjusted for x64 as well, currently add 2 to mem is for x86
 		[IntPtr]$GetCommandLineAAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "GetCommandLineA")
-		$GetCommandLineAAddr = Add-SignedIntAsUnsigned $GetCommandLineAAddr 2
-		
-		$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineAAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
-		if ($Success = $false)
-		{
-			throw "Call to VirtualProtect failed"
-		}
-		[IntPtr]$OldAddr = $GetCommandLineAAddr
-		[IntPtr]$GetCommandLineAAddr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($GetCommandLineAAddr, [IntPtr])
-		Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($OldAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
-		Write-Verbose "hi"
-		
-		$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineAAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
-		if ($Success = $false)
-		{
-			throw "Call to VirtualProtect failed"
-		}
-		[IntPtr]$OldAddr = $GetCommandLineAAddr
-		[IntPtr]$GetCommandLineAAddr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($GetCommandLineAAddr, [IntPtr])
-		Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($OldAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
-		Write-Verbose "hi2"
-		
-		
 		[IntPtr]$GetCommandLineWAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "GetCommandLineW")
-		$GetCommandLineWAddr = Add-SignedIntAsUnsigned $GetCommandLineWAddr 2
-		
-		$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineWAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
-		if ($Success = $false)
-		{
-			throw "Call to VirtualProtect failed"
-		}
-		[IntPtr]$OldAddr = $GetCommandLineWAddr
-		[IntPtr]$GetCommandLineWAddr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($GetCommandLineWAddr, [IntPtr])
-		Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($OldAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
-		Write-Verbose "hi3"
-		
-		$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineWAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
-		if ($Success = $false)
-		{
-			throw "Call to VirtualProtect failed"
-		}
-		[IntPtr]$OldAddr = $GetCommandLineWAddr
-		[IntPtr]$GetCommandLineWAddr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($GetCommandLineWAddr, [IntPtr])
-		Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($OldAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
-		Write-Verbose "hi4"
+
 		if ($GetCommandLineAAddr -eq [IntPtr]::Zero -or $GetCommandLineWAddr -eq [IntPtr]::Zero)
 		{
 			throw "GetCommandLine ptr null. GetCommandLineA: $GetCommandLineAAddr. GetCommandLineW: $GetCommandLineWAddr"
 		}
-		Write-Verbose "todo: gca: $GetCommandLineAAddr"
-		Write-Verbose "todo: gcw: $GetCommandLineWAddr"
-		
+
 		#Prepare the shellcode
 		[Byte[]]$Shellcode1 = @()
 		if ($PtrSize -eq 8)
@@ -1577,9 +1525,9 @@ $RemoteScriptBlock = {
 		
 		#################################################
 		#For C++ stuff that is compiled with visual studio as "multithreaded DLL", the above method of overwriting GetCommandLine doesn't work.
-		#	I don't know why exactly.. But the msvcr DLL that a "DLL" compiled executable imports has an export called _acmdln and _wcmdln.
+		#	I don't know why exactly.. But the msvcr DLL that a "DLL compiled executable" imports has an export called _acmdln and _wcmdln.
 		#	It appears to call GetCommandLine and store the result in this var. Then when you call __wgetcmdln it parses and returns the
-		#	argv and argc values stored in these variables. So the wasy thing to do is just overwrite the variable since it is exported.
+		#	argv and argc values stored in these variables. So the easy thing to do is just overwrite the variable since they are exported.
 		$DllList = @("msvcr70d.dll", "msvcr71d.dll", "msvcr80d.dll", "msvcr90d.dll", "msvcr100d.dll", "msvcr110d.dll", "msvcr70.dll" `
 			, "msvcr71.dll", "msvcr80.dll", "msvcr90.dll", "msvcr100.dll", "msvcr110.dll")
 		
@@ -1630,10 +1578,6 @@ $RemoteScriptBlock = {
 		
 		#################################################
 		#Next overwrite CorExitProcess and ExitProcess to instead ExitThread. This way the entire Powershell process doesn't die when the EXE exits.
-		
-		#First overwrite CorExitProcess with a return instruction, this seems to work fine.
-		#Because this process is being loaded in the PowerShell process, code compiled in VisualStudio will always detect it it loaded
-
 
 		$ReturnArray = @()
 		$ExitFunctions = @() #Array of functions to overwrite so the thread doesn't exit the process
@@ -1663,7 +1607,7 @@ $RemoteScriptBlock = {
 		foreach ($ProcExitFunctionAddr in $ExitFunctions)
 		{
 			$ProcExitFunctionAddrTmp = $ProcExitFunctionAddr
-			#Next overwrite ExitProcess, this is more involved. The following is the shellcode:
+			#The following is the shellcode to call ExitThread:
 			#32bit shellcode
 			[Byte[]]$Shellcode1 = @(0xbb)
 			[Byte[]]$Shellcode2 = @(0xc6, 0x03, 0x01, 0x83, 0xec, 0x20, 0x66, 0x81, 0xe4, 0x00, 0xff, 0xbb)
@@ -1847,15 +1791,22 @@ $RemoteScriptBlock = {
 			Write-Warning "PE file being reflectively loaded is not ASLR compatible. If the loading fails, try restarting PowerShell and trying again"
 			[IntPtr]$LoadAddr = $OriginalImageBase
 		}
-		#todo: Need to set this readwriteexecute if no support for nx
-		$PEHandle = $Win32Functions.VirtualAlloc.Invoke($LoadAddr, [UIntPtr]$PEInfo.SizeOfImage, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
 
+		$PEHandle = [IntPtr]::Zero
+		if ($NXCompatible -eq $true)
+		{
+			$PEHandle = $Win32Functions.VirtualAlloc.Invoke($LoadAddr, [UIntPtr]$PEInfo.SizeOfImage, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
+		}
+		else
+		{
+			$PEHandle = $Win32Functions.VirtualAlloc.Invoke($LoadAddr, [UIntPtr]$PEInfo.SizeOfImage, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_EXECUTE_READWRITE)
+		}
+		
 		[IntPtr]$PEEndAddress = Add-SignedIntAsUnsigned ($PEHandle) ([Int64]$PEInfo.SizeOfImage)
 		if ($PEHandle -eq [IntPtr]::Zero)
 		{ 
 			Throw "VirtualAlloc failed to allocate memory."
-		}
-		Write-Verbose "PEHandle: $PEHandle, EndAddr: $PEEndAddress" #todo delete		
+		}		
 		[System.Runtime.InteropServices.Marshal]::Copy($PEBytes, 0, $PEHandle, $PEInfo.SizeOfHeaders) | Out-Null
 		
 		
@@ -1912,19 +1863,17 @@ $RemoteScriptBlock = {
 			#If this is an EXE, call the entry point in a new thread. We have overwritten the ExitProcess function to instead ExitThread
 			#	This way the reflectively loaded EXE won't kill the powershell process when it exits, it will just kill its own thread.
 			[IntPtr]$ExeMainPtr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
-			Write-Verbose "Call EXE Main function. Address: $ExeMainPtr"
-						#todo delete
-			Read-Host "Press any key to begin execution" | Out-Null
-			Write-Verbose "Creating thread for process"
-			$Success = Invoke-Win32 "kernel32.dll" ([IntPtr]) "CreateThread" @([IntPtr], [IntPtr], [IntPtr], [IntPtr], [UInt32], [Ref]) @([IntPtr]::Zero, [IntPtr]::Zero, $ExeMainPtr, [IntPtr]::Zero, ([UInt32]0), [Ref]([IntPtr]::Zero))
-			
+			Write-Verbose "Call EXE Main function. Address: $ExeMainPtr. Creating thread for the EXE to run in."
+
+			Invoke-Win32 "kernel32.dll" ([IntPtr]) "CreateThread" @([IntPtr], [IntPtr], [IntPtr], [IntPtr], [UInt32], [Ref]) @([IntPtr]::Zero, [IntPtr]::Zero, $ExeMainPtr, [IntPtr]::Zero, ([UInt32]0), [Ref]([IntPtr]::Zero)) | Out-Null
+
 			while($true)
 			{
 				[Byte]$ThreadDone = [System.Runtime.InteropServices.Marshal]::ReadByte($ExeDoneBytePtr, 0)
 				if ($ThreadDone -eq 1)
 				{
 					Copy-ArrayOfMemAddresses -CopyInfo $OverwrittenMemInfo -Win32Functions $Win32Functions -Win32Constants $Win32Constants
-					Write-Verbose "Thread has finished!"
+					Write-Verbose "EXE thread has completed."
 					break
 				}
 				else
