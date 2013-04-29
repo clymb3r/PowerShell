@@ -1445,6 +1445,12 @@ $RemoteScriptBlock = {
 		{
 			throw "Kernel32 handle null"
 		}
+		
+		[IntPtr]$KernelBaseHandle = $Win32Functions.GetModuleHandle.Invoke("KernelBase.dll")
+		if ($KernelBaseHandle -eq [IntPtr]::Zero)
+		{
+			throw "KernelBase handle null"
+		}
 
 		#################################################
 		#First overwrite the GetCommandLine() function. This is the function that is called by a new process to get the command line args used to start it.
@@ -1452,14 +1458,8 @@ $RemoteScriptBlock = {
 		$CmdLineWArgsPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($ExeArguments)
 		$CmdLineAArgsPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalAnsi($ExeArguments)
 	
-		[IntPtr]$Kernel32Handle = $Win32Functions.GetModuleHandle.Invoke("Kernel32.dll")
-		if ($Kernel32Handle -eq [IntPtr]::Zero)
-		{
-			throw "Kernel32 handle null"
-		}
-		
-		[IntPtr]$GetCommandLineAAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "GetCommandLineA")
-		[IntPtr]$GetCommandLineWAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "GetCommandLineW")
+		[IntPtr]$GetCommandLineAAddr = $Win32Functions.GetProcAddress.Invoke($KernelBaseHandle, "GetCommandLineA")
+		[IntPtr]$GetCommandLineWAddr = $Win32Functions.GetProcAddress.Invoke($KernelBaseHandle, "GetCommandLineW")
 
 		if ($GetCommandLineAAddr -eq [IntPtr]::Zero -or $GetCommandLineWAddr -eq [IntPtr]::Zero)
 		{
@@ -1607,7 +1607,7 @@ $RemoteScriptBlock = {
 		foreach ($ProcExitFunctionAddr in $ExitFunctions)
 		{
 			$ProcExitFunctionAddrTmp = $ProcExitFunctionAddr
-			#The following is the shellcode to call ExitThread:
+			#The following is the shellcode :
 			#32bit shellcode
 			[Byte[]]$Shellcode1 = @(0xbb)
 			[Byte[]]$Shellcode2 = @(0xc6, 0x03, 0x01, 0x83, 0xec, 0x20, 0x66, 0x81, 0xe4, 0x00, 0xff, 0xbb)
