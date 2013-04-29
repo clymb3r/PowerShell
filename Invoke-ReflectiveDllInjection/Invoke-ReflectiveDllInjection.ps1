@@ -1758,14 +1758,14 @@ $RemoteScriptBlock = {
 		$Win32Functions = Get-Win32Functions
 		$Win32Types = Get-Win32Types
 		
-		
 		#Get basic PE information
 		Write-Verbose "Getting basic PE information from the file"
 		$PEInfo = Get-PEBasicInfo -PEBytes $PEBytes -Win32Types $Win32Types
 		$OriginalImageBase = $PEInfo.OriginalImageBase
 		$NXCompatible = $true
-		if ($PEInfo.DllCharacteristics -band $Win32Constants.IMAGE_DLLCHARACTERISTICS_NX_COMPAT -ne $Win32Constants.IMAGE_DLLCHARACTERISTICS_NX_COMPAT)
+		if (($PEInfo.DllCharacteristics -band $Win32Constants.IMAGE_DLLCHARACTERISTICS_NX_COMPAT) -ne $Win32Constants.IMAGE_DLLCHARACTERISTICS_NX_COMPAT)
 		{
+			Write-Warning "PE is not compatible with DEP, might cause issues" -WarningAction Continue
 			$NXCompatible = $false
 		}
 		
@@ -1786,9 +1786,9 @@ $RemoteScriptBlock = {
 		Write-Verbose "Allocating memory for the PE and write its headers to memory"
 		
 		[IntPtr]$LoadAddr = [IntPtr]::Zero
-		if ($PEInfo.DllCharacteristics -band $Win32Constants.IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE -ne $Win32Constants.IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE)
+		if (($PEInfo.DllCharacteristics -band $Win32Constants.IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE) -ne $Win32Constants.IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE)
 		{
-			Write-Warning "PE file being reflectively loaded is not ASLR compatible. If the loading fails, try restarting PowerShell and trying again"
+			Write-Warning "PE file being reflectively loaded is not ASLR compatible. If the loading fails, try restarting PowerShell and trying again" -WarningAction Continue
 			[IntPtr]$LoadAddr = $OriginalImageBase
 		}
 
@@ -1814,7 +1814,7 @@ $RemoteScriptBlock = {
 		Write-Verbose "Getting detailed PE information from the headers loaded in memory"
 		$PEInfo = Get-PEDetailedInfo -PEHandle $PEHandle -Win32Types $Win32Types -Win32Constants $Win32Constants
 		$PEInfo | Add-Member -MemberType NoteProperty -Name EndAddress -Value $PEEndAddress
-		
+		Write-Debug "StartAddress: $PEHandle    EndAddress: $PEEndAddress"
 		
 		#Copy each section from the PE in to memory
 		Write-Verbose "Copy PE sections in to memory"
@@ -1967,7 +1967,13 @@ $RemoteScriptBlock = {
 #Main function to either run the script locally or remotely
 Function Main
 {
-	[System.Diagnostics.Process]::GetCurrentProcess() | Select-Object id	#todo delete
+	if ($PSCmdlet.MyInvocation.BoundParameters["Debug"].IsPresent)
+	{
+		$DebugPreference  = "Continue"
+	}
+	
+	$ProcessID = ([System.Diagnostics.Process]::GetCurrentProcess()).id
+	Write-Debug "PowerShell ProcessID: $ProcessID"
 	
 	[Byte[]]$PEBytes = $null
 	
