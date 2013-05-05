@@ -1,5 +1,9 @@
-﻿Build started 4/5/2013 8:40:52 PM.
+﻿Build started 5/5/2013 11:29:47 AM.
+     1>Project "C:\Users\joe.HOME\Documents\GitHub\PowerShell\Invoke-ReflectiveDllInjection\DemoDLL\DemoDLL\DemoDLL.vcxproj" on node 2 (clean target(s)).
+     1>_PrepareForClean:
+         Deleting file "x64\Debug\DemoDLL.lastbuildstate".
+     1>Done Building Project "C:\Users\joe.HOME\Documents\GitHub\PowerShell\Invoke-ReflectiveDllInjection\DemoDLL\DemoDLL\DemoDLL.vcxproj" (clean target(s)).
 
 Build succeeded.
 
-Time Elapsed 00:00:00.12
+Time Elapsed 00:00:00.04
