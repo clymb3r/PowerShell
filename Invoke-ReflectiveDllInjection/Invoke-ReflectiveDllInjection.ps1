@@ -1009,13 +1009,13 @@ $RemoteScriptBlock = {
 			$PEInfo | Add-Member -MemberType NoteProperty -Name SectionHeaderPtr -Value $SectionHeaderPtr
 		}
 		
-		if (($NtHeadersInfo.IMAGE_NT_HEADERS.FileHeader.Characteristics -band $Win32Constants.IMAGE_FILE_EXECUTABLE_IMAGE) -eq $Win32Constants.IMAGE_FILE_EXECUTABLE_IMAGE)
-		{
-			$PEInfo | Add-Member -MemberType NoteProperty -Name FileType -Value 'EXE'
-		}
-		elseif (($NtHeadersInfo.IMAGE_NT_HEADERS.FileHeader.Characteristics -band $Win32Constants.IMAGE_FILE_DLL) -eq $Win32Constants.IMAGE_FILE_DLL)
+		if (($NtHeadersInfo.IMAGE_NT_HEADERS.FileHeader.Characteristics -band $Win32Constants.IMAGE_FILE_DLL) -eq $Win32Constants.IMAGE_FILE_DLL)
 		{
 			$PEInfo | Add-Member -MemberType NoteProperty -Name FileType -Value 'DLL'
+		}
+		elseif (($NtHeadersInfo.IMAGE_NT_HEADERS.FileHeader.Characteristics -band $Win32Constants.IMAGE_FILE_EXECUTABLE_IMAGE) -eq $Win32Constants.IMAGE_FILE_EXECUTABLE_IMAGE)
+		{
+			$PEInfo | Add-Member -MemberType NoteProperty -Name FileType -Value 'EXE'
 		}
 		else
 		{
