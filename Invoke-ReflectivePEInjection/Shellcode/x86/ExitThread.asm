@@ -8,6 +8,6 @@ _start:
 
 	; Call exitthread instead of exit process
 	sub esp, 0x20
-	and sp, 0xFF00 ; Needed for stack alignment
+	and esp, 0xFFFFFFc0 ; Needed for stack alignment
 	mov ebx, 0x41414141
 	call ebx

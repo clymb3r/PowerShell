@@ -9,7 +9,7 @@ _start:
 
 	; Set up stack for function call to GetProcAddress
 	sub rsp, 0x20
-	and sp, 0x0
+	and sp, 0xffc0
 
 	; Call getprocaddress
 	mov rcx, 0x4141414141414141	; DllHandle, set by PS

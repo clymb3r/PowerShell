@@ -8,7 +8,7 @@ _start:
 	mov [rbx], byte 0x01
 
 	; Call exitthread instead of exitprocess
-	sub rsp, 0x20
-	and sp, 0xFF00 ; Needed for stack alignment
+	sub rsp, 0xc0
+	and sp, 0xFFf0 ; Needed for stack alignment
 	mov rbx, 0x4141414141414141
 	call rbx

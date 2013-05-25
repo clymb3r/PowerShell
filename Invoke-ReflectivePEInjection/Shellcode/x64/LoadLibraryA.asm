@@ -7,7 +7,7 @@ _start:
 	push rbx
 	mov rbx, rsp
 	sub rsp, 0x20
-	and sp, 0x0000
+	and sp, 0xffc0
 
 	; Call LoadLibraryA
 	mov rcx, 0x4141414141414141	; Ptr to string of library, set by PS

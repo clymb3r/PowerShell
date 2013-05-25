@@ -5,7 +5,7 @@ _start:
 	; Get stack setup
 	push rbx
 	mov rbx, rsp
-	and sp, 0x0
+	and sp, 0xff00
 	
 	; Call DllMain
 	mov rcx, 0x4141414141414141	; DLLHandle, set by PowerShell
