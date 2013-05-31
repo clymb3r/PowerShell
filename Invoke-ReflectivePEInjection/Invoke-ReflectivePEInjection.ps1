@@ -3,7 +3,7 @@
 
 This script has two modes. It can reflectively load a DLL/EXE in to the PowerShell process, 
 or it can reflectively load a DLL in to a remote process. These modes have different parameters and constraints, 
-please lead the Notes section (GENERAL NOTS) for information on how to use them.
+please lead the Notes section (GENERAL NOTES) for information on how to use them.
 
 
 1.)Reflectively loads a DLL or EXE in to memory of the Powershell process.
@@ -23,7 +23,8 @@ remote process.
 
 While this script provides functionality to specify a file to load from disk or from a URL, these are more for demo purposes. The way I'd recommend using the script is to create a byte array
 containing the file you'd like to reflectively load, and hardcode that byte array in to the script. One advantage of doing this is you can encrypt the byte array and decrypt it in memory, which will
-bypass A/V. Another advantage is you won't be making web requests.
+bypass A/V. Another advantage is you won't be making web requests. The script can also load files from SQL Server and be used as a SQL Server backdoor. Please see the Casaba
+blog linked below (thanks to whitey).
 
 PowerSploit Function: Invoke-ReflectivePEInjection
 Author: Joe Bialek, Twitter: @JosephBialek
@@ -146,10 +147,11 @@ Find a DemoDLL at: https://github.com/clymb3r/PowerShell/tree/master/Invoke-Refl
 .LINK
 
 Blog: http://clymb3r.wordpress.com/
-Github repo: https://github.com/clymb3r/PowerShell/tree/master/Invoke-ReflectiveDllInjection
+Github repo: https://github.com/clymb3r/PowerShell/tree/master/Invoke-ReflectivePEInjection
 
 Blog on reflective loading: http://clymb3r.wordpress.com/2013/04/06/reflective-dll-injection-with-powershell/
 Blog on modifying mimikatz for reflective loading: http://clymb3r.wordpress.com/2013/04/09/modifying-mimikatz-to-be-loaded-using-invoke-reflectivedllinjection-ps1/
+Blog on using this script as a backdoor with SQL server: http://www.casaba.com/blog/
 
 #>
 
