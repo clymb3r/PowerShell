@@ -54,6 +54,10 @@ Optional, the return type of the function being called in the DLL. Default: Void
 	Options: String, WString, Void. See notes for more information.
 	IMPORTANT: For DLLs being loaded remotely, only Void is supported.
 	
+.PARAMETER ExeArgs
+
+Optional, arguments to pass to the executable being reflectively loaded.
+	
 .PARAMETER ProcName
 
 Optional, the name of the remote process to inject the DLL in to. If not injecting in to remote process, ignore this.
@@ -2595,6 +2599,15 @@ $RemoteScriptBlock = {
 				$ImportDescriptorPtr = Add-SignedIntAsUnsigned ($ImportDescriptorPtr) ([System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_IMPORT_DESCRIPTOR))
 			}
 		}
+		
+		#Call DllMain with process detach
+		Write-Verbose "Calling dllmain so the DLL knows it is being unloaded"
+		$DllMainPtr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
+		$DllMainDelegate = Get-DelegateType @([IntPtr], [UInt32], [IntPtr]) ([Bool])
+		$DllMain = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($DllMainPtr, $DllMainDelegate)
+		
+		$DllMain.Invoke($PEInfo.PEHandle, 0, [IntPtr]::Zero) | Out-Null
+		
 		
 		$Success = $Win32Functions.VirtualFree.Invoke($PEHandle, [UInt64]0, $Win32Constants.MEM_RELEASE)
 		if ($Success -eq $false)
