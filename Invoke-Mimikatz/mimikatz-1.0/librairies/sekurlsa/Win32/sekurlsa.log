@@ -1,0 +1,54 @@
+﻿Build started 9/30/2013 8:26:38 AM.
+Project "C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\librairies\sekurlsa\sekurlsa.vcxproj" on node 2 (build target(s)).
+InitializeBuildStatus:
+  Creating "Win32\sekurlsa.unsuccessfulbuild" because "AlwaysCreate" was specified.
+ClCompile:
+  C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\bin\CL.exe /c /I"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\/commun" /I"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\/modules" /Zi /nologo /W3 /WX- /Ox /Oi /Os /Oy- /GL /D WIN32 /D NDEBUG /D PSAPI_VERSION=1 /D _WINDOWS /D _USRDLL /D SEKURLSA_EXPORTS /D _WINDLL /D _UNICODE /D UNICODE /GF /Gm- /MT /GS /Gy /fp:fast /fp:except- /Zc:wchar_t /Zc:forScope /Fo"Win32\\" /Fd"Win32\vc100.pdb" /Gd /TP /analyze- /errorReport:none ..\..\commun\kmodel.cpp ..\..\modules\mod_memory.cpp ..\..\modules\mod_parseur.cpp ..\..\modules\mod_pipe.cpp ..\..\modules\mod_process.cpp ..\..\modules\mod_system.cpp ..\..\modules\mod_text.cpp modules\credman.cpp modules\incognito.cpp modules\sam.cpp modules\secrets.cpp "Security Packages\msv1_0.cpp" "Security Packages\msv1_0_helper.cpp" sekurlsa.cpp
+  kmodel.cpp
+  mod_memory.cpp
+  mod_parseur.cpp
+  mod_pipe.cpp
+  mod_process.cpp
+  mod_system.cpp
+  mod_text.cpp
+  credman.cpp
+modules\credman.cpp(170): warning C4244: 'initializing' : conversion from 'DWORD' to 'USHORT', possible loss of data
+modules\credman.cpp(170): warning C4244: 'initializing' : conversion from 'DWORD' to 'USHORT', possible loss of data
+  incognito.cpp
+  sam.cpp
+  secrets.cpp
+  msv1_0.cpp
+  msv1_0_helper.cpp
+  sekurlsa.cpp
+ResourceCompile:
+  C:\Program Files (x86)\Microsoft SDKs\Windows\v7.0A\bin\rc.exe /D _UNICODE /D UNICODE /l"0x040c" /nologo /fo"Win32\sekurlsa.res" sekurlsa.rc 
+Link:
+  C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\bin\link.exe /ERRORREPORT:NONE /OUT:"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\Win32\sekurlsa.dll" /INCREMENTAL:NO /NOLOGO psapi.lib secur32.lib advapi32.lib shlwapi.lib /MANIFEST /ManifestFile:"Win32\sekurlsa.dll.intermediate.manifest" /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /PDB:"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\Win32\sekurlsa.pdb" /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /LTCG /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\Win32\sekurlsa.lib" /MACHINE:X86 /DLL Win32\sekurlsa.res
+  Win32\kmodel.obj
+  Win32\mod_memory.obj
+  Win32\mod_parseur.obj
+  Win32\mod_pipe.obj
+  Win32\mod_process.obj
+  Win32\mod_system.obj
+  Win32\mod_text.obj
+  Win32\credman.obj
+  Win32\incognito.obj
+  Win32\sam.obj
+  Win32\secrets.obj
+  Win32\msv1_0.obj
+  Win32\msv1_0_helper.obj
+  Win32\sekurlsa.obj
+     Creating library C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\Win32\sekurlsa.lib and object C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\Win32\sekurlsa.exp
+  Generating code
+  Finished generating code
+  sekurlsa.vcxproj -> C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\Win32\sekurlsa.dll
+Manifest:
+  C:\Program Files (x86)\Microsoft SDKs\Windows\v7.0A\bin\mt.exe /nologo /verbose /outputresource:"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\Win32\sekurlsa.dll;#2" /manifest Win32\sekurlsa.dll.intermediate.manifest "C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\Include\Manifest\dpiaware.manifest"
+FinalizeBuildStatus:
+  Deleting file "Win32\sekurlsa.unsuccessfulbuild".
+  Touching "Win32\sekurlsa.lastbuildstate".
+Done Building Project "C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\librairies\sekurlsa\sekurlsa.vcxproj" (build target(s)).
+
+Build succeeded.
+
+Time Elapsed 00:00:08.10

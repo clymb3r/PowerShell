@@ -1,0 +1,78 @@
+﻿Build started 9/30/2013 12:55:19 PM.
+Project "C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\mimikatz\mimikatz.vcxproj" on node 2 (build target(s)).
+InitializeBuildStatus:
+  Creating "Win32\mimikatz.unsuccessfulbuild" because "AlwaysCreate" was specified.
+ClCompile:
+  C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\bin\CL.exe /c /I"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\/commun" /I"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\/modules" /Zi /nologo /W3 /WX- /MP /Ox /Oi /Os /Oy- /GL /D WIN32 /D NDEBUG /D PSAPI_VERSION=1 /D _CONSOLE /D _WINDLL /D _UNICODE /D UNICODE /GF /Gm- /MT /GS /Gy /fp:fast /fp:except- /Zc:wchar_t /Zc:forScope /Fo"Win32\\" /Fd"Win32\vc100.pdb" /Gd /TP /analyze- /errorReport:none main.cpp
+  main.cpp
+main.cpp(45): warning C4996: 'wcscpy': This function or variable may be unsafe. Consider using wcscpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+          C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\include\string.h(283) : see declaration of 'wcscpy'
+main.cpp(67): warning C4996: 'wcscpy': This function or variable may be unsafe. Consider using wcscpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+          C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\include\string.h(283) : see declaration of 'wcscpy'
+ResourceCompile:
+  All outputs are up-to-date.
+Link:
+  C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\bin\link.exe /ERRORREPORT:NONE /OUT:"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\Win32\mimikatz.dll" /INCREMENTAL:NO /NOLOGO psapi.lib advapi32.lib user32.lib secur32.lib crypt32.lib shlwapi.lib wtsapi32.lib shell32.lib /MANIFEST:NO /PDB:"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\Win32\mimikatz.pdb" /SUBSYSTEM:CONSOLE /OPT:REF /OPT:ICF /LTCG /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\Win32\mimikatz.lib" /MACHINE:X86 /DLL Win32\mimikatz.res
+  Win32\mod_crypto.obj
+  Win32\mod_cryptoapi.obj
+  Win32\mod_cryptong.obj
+  Win32\mod_hash.obj
+  Win32\mod_hive.obj
+  Win32\mod_inject.obj
+  Win32\mod_memory.obj
+  Win32\mod_minidump.obj
+  Win32\mod_parseur.obj
+  Win32\mod_patch.obj
+  Win32\mod_pipe.obj
+  Win32\mod_privilege.obj
+  Win32\mod_process.obj
+  Win32\mod_secacl.obj
+  Win32\mod_service.obj
+  Win32\mod_system.obj
+  Win32\mod_text.obj
+  Win32\mod_thread.obj
+  Win32\mod_ts.obj
+  Win32\mod_windows.obj
+  Win32\mod_winsta_desktop.obj
+  Win32\global.obj
+  Win32\main.obj
+  Win32\mimikatz.obj
+  Win32\keys_nt5.obj
+  Win32\keys_nt6.obj
+  Win32\mod_mimikatz_crypto.obj
+  Win32\mod_mimikatz_divers.obj
+  Win32\mod_mimikatz_efs.obj
+  Win32\mod_mimikatz_handle.obj
+  Win32\mod_mimikatz_hash.obj
+  Win32\mod_mimikatz_inject.obj
+  Win32\mod_mimikatz_minesweeper.obj
+  Win32\mod_mimikatz_nogpo.obj
+  Win32\mod_mimikatz_privilege.obj
+  Win32\mod_mimikatz_process.obj
+  Win32\mod_mimikatz_samdump.obj
+  Win32\mod_mimikatz_impersonate.obj
+  Win32\mod_mimikatz_sekurlsa.obj
+  Win32\mod_mimikatz_service.obj
+  Win32\mod_mimikatz_standard.obj
+  Win32\mod_mimikatz_system.obj
+  Win32\mod_mimikatz_terminalserver.obj
+  Win32\mod_mimikatz_thread.obj
+  Win32\mod_mimikatz_winmine.obj
+  Win32\kerberos.obj
+  Win32\livessp.obj
+  Win32\msv1_0.obj
+  Win32\ssp.obj
+  Win32\tspkg.obj
+  Win32\wdigest.obj
+     Creating library C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\Win32\mimikatz.lib and object C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\Win32\mimikatz.exp
+  Generating code
+  Finished generating code
+  mimikatz.vcxproj -> C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\Win32\mimikatz.dll
+FinalizeBuildStatus:
+  Deleting file "Win32\mimikatz.unsuccessfulbuild".
+  Touching "Win32\mimikatz.lastbuildstate".
+Done Building Project "C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\mimikatz\mimikatz.vcxproj" (build target(s)).
+
+Build succeeded.
+
+Time Elapsed 00:00:04.48

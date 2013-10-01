@@ -1,0 +1,28 @@
+﻿Build started 9/30/2013 8:29:00 AM.
+Project "C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\kappfree\kappfree.vcxproj" on node 2 (build target(s)).
+PrepareForBuild:
+  Creating directory "C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\x64\".
+InitializeBuildStatus:
+  Creating "x64\kappfree.unsuccessfulbuild" because "AlwaysCreate" was specified.
+ClCompile:
+  C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\bin\x86_amd64\CL.exe /c /I"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\/commun" /I"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\/modules" /Zi /nologo /W3 /WX- /Ox /Oi /Os /GL /D WIN32 /D NDEBUG /D _WINDOWS /D _USRDLL /D KAPPFREE_EXPORTS /D _WINDLL /D _UNICODE /D UNICODE /GF /Gm- /MT /GS /Gy /fp:fast /fp:except- /Zc:wchar_t /Zc:forScope /Fo"x64\\" /Fd"x64\vc100.pdb" /Gd /TC /errorReport:none kappfree.c
+  kappfree.c
+ResourceCompile:
+  C:\Program Files (x86)\Microsoft SDKs\Windows\v7.0A\bin\rc.exe /D _UNICODE /D UNICODE /l"0x0409" /nologo /fo"x64\kappfree.res" kappfree.rc 
+Link:
+  C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\bin\x86_amd64\link.exe /ERRORREPORT:NONE /OUT:"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\x64\kappfree.dll" /INCREMENTAL:NO /NOLOGO advapi32.lib /MANIFEST /ManifestFile:"x64\kappfree.dll.intermediate.manifest" /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /PDB:"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\x64\kappfree.pdb" /SUBSYSTEM:WINDOWS /OPT:REF /OPT:ICF /LTCG /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\x64\kappfree.lib" /MACHINE:X64 /DLL x64\kappfree.res
+  x64\kappfree.obj
+     Creating library C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\x64\kappfree.lib and object C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\x64\kappfree.exp
+  Generating code
+  Finished generating code
+  kappfree.vcxproj -> C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\x64\kappfree.dll
+Manifest:
+  C:\Program Files (x86)\Microsoft SDKs\Windows\v7.0A\bin\mt.exe /nologo /verbose /outputresource:"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\x64\kappfree.dll;#2" /manifest x64\kappfree.dll.intermediate.manifest "C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\Include\Manifest\dpiaware.manifest"
+FinalizeBuildStatus:
+  Deleting file "x64\kappfree.unsuccessfulbuild".
+  Touching "x64\kappfree.lastbuildstate".
+Done Building Project "C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\kappfree\kappfree.vcxproj" (build target(s)).
+
+Build succeeded.
+
+Time Elapsed 00:00:01.21

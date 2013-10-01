@@ -1,0 +1,78 @@
+﻿Build started 9/30/2013 12:54:57 PM.
+Project "C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\mimikatz\mimikatz.vcxproj" on node 2 (build target(s)).
+InitializeBuildStatus:
+  Creating "x64\mimikatz.unsuccessfulbuild" because "AlwaysCreate" was specified.
+ClCompile:
+  C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\bin\x86_amd64\CL.exe /c /I"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\/commun" /I"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\/modules" /Zi /nologo /W3 /WX- /MP /Ox /Oi /Os /GL /D WIN32 /D NDEBUG /D PSAPI_VERSION=1 /D _CONSOLE /D _WINDLL /D _UNICODE /D UNICODE /GF /Gm- /MT /GS /Gy /fp:fast /fp:except- /Zc:wchar_t /Zc:forScope /Fo"x64\\" /Fd"x64\vc100.pdb" /Gd /TP /errorReport:none main.cpp
+  main.cpp
+main.cpp(45): warning C4996: 'wcscpy': This function or variable may be unsafe. Consider using wcscpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+          C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\include\string.h(283) : see declaration of 'wcscpy'
+main.cpp(67): warning C4996: 'wcscpy': This function or variable may be unsafe. Consider using wcscpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+          C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\include\string.h(283) : see declaration of 'wcscpy'
+ResourceCompile:
+  All outputs are up-to-date.
+Link:
+  C:\Program Files (x86)\Microsoft Visual Studio 10.0\VC\bin\x86_amd64\link.exe /ERRORREPORT:NONE /OUT:"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\x64\mimikatz.dll" /INCREMENTAL:NO /NOLOGO psapi.lib advapi32.lib user32.lib secur32.lib crypt32.lib shlwapi.lib wtsapi32.lib shell32.lib /MANIFEST:NO /PDB:"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\x64\mimikatz.pdb" /SUBSYSTEM:CONSOLE /OPT:REF /OPT:ICF /LTCG /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\x64\mimikatz.lib" /MACHINE:X64 /DLL x64\mimikatz.res
+  x64\mod_crypto.obj
+  x64\mod_cryptoapi.obj
+  x64\mod_cryptong.obj
+  x64\mod_hash.obj
+  x64\mod_hive.obj
+  x64\mod_inject.obj
+  x64\mod_memory.obj
+  x64\mod_minidump.obj
+  x64\mod_parseur.obj
+  x64\mod_patch.obj
+  x64\mod_pipe.obj
+  x64\mod_privilege.obj
+  x64\mod_process.obj
+  x64\mod_secacl.obj
+  x64\mod_service.obj
+  x64\mod_system.obj
+  x64\mod_text.obj
+  x64\mod_thread.obj
+  x64\mod_ts.obj
+  x64\mod_windows.obj
+  x64\mod_winsta_desktop.obj
+  x64\global.obj
+  x64\main.obj
+  x64\mimikatz.obj
+  x64\keys_nt5.obj
+  x64\keys_nt6.obj
+  x64\mod_mimikatz_crypto.obj
+  x64\mod_mimikatz_divers.obj
+  x64\mod_mimikatz_efs.obj
+  x64\mod_mimikatz_handle.obj
+  x64\mod_mimikatz_hash.obj
+  x64\mod_mimikatz_inject.obj
+  x64\mod_mimikatz_minesweeper.obj
+  x64\mod_mimikatz_nogpo.obj
+  x64\mod_mimikatz_privilege.obj
+  x64\mod_mimikatz_process.obj
+  x64\mod_mimikatz_samdump.obj
+  x64\mod_mimikatz_impersonate.obj
+  x64\mod_mimikatz_sekurlsa.obj
+  x64\mod_mimikatz_service.obj
+  x64\mod_mimikatz_standard.obj
+  x64\mod_mimikatz_system.obj
+  x64\mod_mimikatz_terminalserver.obj
+  x64\mod_mimikatz_thread.obj
+  x64\mod_mimikatz_winmine.obj
+  x64\kerberos.obj
+  x64\livessp.obj
+  x64\msv1_0.obj
+  x64\ssp.obj
+  x64\tspkg.obj
+  x64\wdigest.obj
+     Creating library C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\x64\mimikatz.lib and object C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\x64\mimikatz.exp
+  Generating code
+  Finished generating code
+  mimikatz.vcxproj -> C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\x64\mimikatz.dll
+FinalizeBuildStatus:
+  Deleting file "x64\mimikatz.unsuccessfulbuild".
+  Touching "x64\mimikatz.lastbuildstate".
+Done Building Project "C:\Github\PowerShellExperimental\Invoke-Mimikatz\mimikatz-1.0\mimikatz\mimikatz.vcxproj" (build target(s)).
+
+Build succeeded.
+
+Time Elapsed 00:00:05.24
