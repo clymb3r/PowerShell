@@ -1,4 +1,4 @@
-﻿Param(
+Param(
 [Parameter(Position=0, Mandatory=$true)]
 [String]
 $File

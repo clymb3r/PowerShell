@@ -1,4 +1,6 @@
-﻿<#
+function Invoke-Mimikatz
+{
+<#
 .SYNOPSIS
 
 This script leverages Mimikatz 1.0 and Invoke-ReflectivePEInjection to reflectively load Mimikatz completely in memory. This allows you to do things such as
@@ -13,8 +15,8 @@ Mimikatz Author: Benjamin DELPY `gentilkiwi`. Blog: http://blog.gentilkiwi.com. 
 License:  http://creativecommons.org/licenses/by/3.0/fr/
 Required Dependencies: Mimikatz (included)
 Optional Dependencies: None
-Version: 1.0
-ReflectivePEInjection version: 1.0
+Version: 1.1
+ReflectivePEInjection version: 1.1
 Mimikatz version: 1.0
 
 .DESCRIPTION
@@ -2708,3 +2710,4 @@ Function Main
 }
 
 Main
+}

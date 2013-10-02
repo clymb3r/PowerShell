@@ -1,4 +1,6 @@
-﻿<#
+function Invoke-NinjaCopy
+{
+<#
 .SYNOPSIS
 
 This script can copy files off an NTFS volume by opening a read handle to the entire volume (such as c:) and parsing the NTFS structures. This requires you
@@ -23,8 +25,8 @@ Contributors: This script has a byte array hardcoded, which contains a DLL wich 
 License: GPLv3 or later
 Required Dependencies: None
 Optional Dependencies: None
-Version: 1.0
-ReflectivePEInjection version: 1.0
+Version: 1.1
+ReflectivePEInjection version: 1.1
 
 .DESCRIPTION
 
@@ -2843,3 +2845,4 @@ Main
 
 [GC]::Collect()
 [GC]::Collect()
+}
