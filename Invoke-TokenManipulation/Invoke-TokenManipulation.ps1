@@ -765,6 +765,25 @@ Github repo: https://github.com/clymb3r/PowerShell
                         }
                         [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ImpersonationLevelPtr)
                     }
+
+                    #Query the token sessionid
+                    $ReturnObj | Add-Member -Type NoteProperty -Name SessionID -Value "Unknown"
+
+                    [UInt32]$TokenSessionIdSize = 4
+                    [IntPtr]$TokenSessionIdPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TokenSessionIdSize)
+                    [UInt32]$RealSize = 0
+                    $Success = $GetTokenInformation.Invoke($hToken, $TOKEN_INFORMATION_CLASS::TokenSessionId, $TokenSessionIdPtr, $TokenSessionIdSize, [Ref]$RealSize)
+                    if (-not $Success)
+                    {
+                        $ErrorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+                        Write-Warning "GetTokenInformation failed to retrieve Token SessionId. ErrorCode: $ErrorCode"
+                    }
+                    else
+                    {
+                        [UInt32]$TokenSessionId = [System.Runtime.InteropServices.Marshal]::PtrToStructure($TokenSessionIdPtr, [Type][UInt32])
+                        $ReturnObj.SessionID = $TokenSessionId
+                    }
+                    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($TokenSessionIdPtr)
                 }
                 else
                 {
@@ -908,7 +927,8 @@ Github repo: https://github.com/clymb3r/PowerShell
                 $ProcessArgsPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($ProcessArgs)
             }
 
-            $Success = $CreateProcessWithTokenW.Invoke($NewHToken, 0x2, $ProcessNamePtr, $ProcessArgsPtr, 0x10, [IntPtr]::Zero, [IntPtr]::Zero, $StartupInfoPtr, $ProcessInfoPtr)
+            #todo: protected process
+            $Success = $CreateProcessWithTokenW.Invoke($NewHToken, 0x2, $ProcessNamePtr, $ProcessArgsPtr, 0x400000, [IntPtr]::Zero, [IntPtr]::Zero, $StartupInfoPtr, $ProcessInfoPtr)
             if ($Success)
             {
                 #Free the handles returned in the ProcessInfo structure
