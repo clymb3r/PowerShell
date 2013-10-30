@@ -941,6 +941,7 @@ Github repo: https://github.com/clymb3r/PowerShell
     }
 
 
+    #Gets important information about the token such as the logon type associated with the logon
     function Get-TokenInformation
     {
         Param(
@@ -980,6 +981,7 @@ Github repo: https://github.com/clymb3r/PowerShell
                 if ($LogonSessionData.Username.Buffer -ne [IntPtr]::Zero -and 
                     $LogonSessionData.LoginDomain.Buffer -ne [IntPtr]::Zero)
                 {
+                    #Get the username and domainname associated with the token
                     $Username = [System.Runtime.InteropServices.Marshal]::PtrToStringUni($LogonSessionData.Username.Buffer, $LogonSessionData.Username.Length/2)
                     $Domain = [System.Runtime.InteropServices.Marshal]::PtrToStringUni($LogonSessionData.LoginDomain.Buffer, $LogonSessionData.LoginDomain.Length/2)
 
@@ -1139,6 +1141,7 @@ Github repo: https://github.com/clymb3r/PowerShell
     }
 
 
+    #Takes an array of TokenObjects built by the script and returns the unique ones
     function Get-UniqueTokens
     {
         Param(
