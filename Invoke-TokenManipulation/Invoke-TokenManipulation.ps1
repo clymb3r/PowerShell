@@ -18,6 +18,11 @@ Because of this limitation, the recommended way to use this script is to use Cre
 Token, and then use this process to pivot. This works because the entire process is created using the other users Logon Token, so it will use their
 credentials for the authentication.
 
+IMPORTANT: If you are creating a process, by default this script will modify the ACL of the current users desktop to allow full control to "Everyone". 
+This is done so that the UI of the process is shown. If you do not need the UI, use the -NoUI flag to prevent the ACL from being modified. This ACL
+is not permenant, as in, when the current logs off the ACL is cleared. It is still preferrable to not modify things unless they need to be modified though,
+so I created the NoUI flag.
+
 
 Important differences from incognito:
 First of all, you should probably read the incognito white paper to understand what incognito does. If you use incognito, you'll notice it differentiates
@@ -40,7 +45,7 @@ Author: Joe Bialek, Twitter: @JosephBialek
 License: BSD 3-Clause
 Required Dependencies: None
 Optional Dependencies: None
-Version: 0.13
+Version: 0.14
 
 .DESCRIPTION
 
@@ -90,6 +95,12 @@ Specify the name of the process to spawn when using the -CreateProcess mode. You
 .PARAMETER ProcessArgs
 
 Specify the arguments to start the specified process with when using the -CreateProcess mode.
+
+.PARAMETER NoUI
+
+If you are creating a process which doesn't need a UI to be rendered, use this flag. This will prevent the script from modifying the Desktop ACL's of the 
+current user. If this flag isn't set and -CreateProcess is used, this script will modify the ACL's of the current users desktop to allow full control
+to "Everyone".
 
 	
 .EXAMPLE
@@ -180,7 +191,11 @@ Github repo: https://github.com/clymb3r/PowerShell
 
         [Parameter(ParameterSetName = "CreateProcess")]
         [String]
-        $ProcessArgs
+        $ProcessArgs,
+
+        [Parameter(ParameterSetName = "CreateProcess")]
+        [Switch]
+        $NoUI
     )
    
     Set-StrictMode -Version 2
@@ -640,7 +655,57 @@ Github repo: https://github.com/clymb3r/PowerShell
     $LocalFreeAddr = Get-ProcAddress kernel32.dll LocalFree
     $LocalFreeDelegate = Get-DelegateType @([IntPtr]) ([IntPtr])
     $LocalFree = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($LocalFreeAddr, $LocalFreeDelegate)
+
+    $LookupPrivilegeNameWAddr = Get-ProcAddress advapi32.dll LookupPrivilegeNameW
+    $LookupPrivilegeNameWDelegate = Get-DelegateType @([IntPtr], [IntPtr], [IntPtr], [UInt32].MakeByRefType()) ([Bool])
+    $LookupPrivilegeNameW = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($LookupPrivilegeNameWAddr, $LookupPrivilegeNameWDelegate)
     ###############################
+
+
+    #Used to add 64bit memory addresses
+    Function Add-SignedIntAsUnsigned
+	{
+		Param(
+		[Parameter(Position = 0, Mandatory = $true)]
+		[Int64]
+		$Value1,
+		
+		[Parameter(Position = 1, Mandatory = $true)]
+		[Int64]
+		$Value2
+		)
+		
+		[Byte[]]$Value1Bytes = [BitConverter]::GetBytes($Value1)
+		[Byte[]]$Value2Bytes = [BitConverter]::GetBytes($Value2)
+		[Byte[]]$FinalBytes = [BitConverter]::GetBytes([UInt64]0)
+
+		if ($Value1Bytes.Count -eq $Value2Bytes.Count)
+		{
+			$CarryOver = 0
+			for ($i = 0; $i -lt $Value1Bytes.Count; $i++)
+			{
+				#Add bytes
+				[UInt16]$Sum = $Value1Bytes[$i] + $Value2Bytes[$i] + $CarryOver
+
+				$FinalBytes[$i] = $Sum -band 0x00FF
+				
+				if (($Sum -band 0xFF00) -eq 0x100)
+				{
+					$CarryOver = 1
+				}
+				else
+				{
+					$CarryOver = 0
+				}
+			}
+		}
+		else
+		{
+			Throw "Cannot add bytearrays of different sizes"
+		}
+		
+		return [BitConverter]::ToInt64($FinalBytes, 0)
+	}
 
 
     #Enable SeSecurityPrivilege, needed to query security information for desktop DACL
@@ -1097,6 +1162,7 @@ Github repo: https://github.com/clymb3r/PowerShell
                         [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ImpersonationLevelPtr)
                     }
 
+
                     #Query the token sessionid
                     $ReturnObj | Add-Member -Type NoteProperty -Name SessionID -Value "Unknown"
 
@@ -1115,6 +1181,82 @@ Github repo: https://github.com/clymb3r/PowerShell
                         $ReturnObj.SessionID = $TokenSessionId
                     }
                     [System.Runtime.InteropServices.Marshal]::FreeHGlobal($TokenSessionIdPtr)
+
+
+                    #Query the token privileges
+                    $ReturnObj | Add-Member -Type NoteProperty -Name PrivilegesEnabled -Value @()
+                    $ReturnObj | Add-Member -Type NoteProperty -Name PrivilegesDisabledButAvailable -Value @()
+
+                    [UInt32]$TokenPrivilegesSize = 1000
+                    [IntPtr]$TokenPrivilegesPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TokenPrivilegesSize)
+                    [UInt32]$RealSize = 0
+                    $Success = $GetTokenInformation.Invoke($hToken, $TOKEN_INFORMATION_CLASS::TokenPrivileges, $TokenPrivilegesPtr, $TokenPrivilegesSize, [Ref]$RealSize)
+                    if (-not $Success)
+                    {
+                        $ErrorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+                        Write-Warning "GetTokenInformation failed to retrieve Token SessionId. ErrorCode: $ErrorCode"
+                    }
+                    else
+                    {
+                        $TokenPrivileges = [System.Runtime.InteropServices.Marshal]::PtrToStructure($TokenPrivilegesPtr, [Type]$TOKEN_PRIVILEGES)
+                        
+                        #Loop through each privilege
+                        [IntPtr]$PrivilegesBasePtr = [IntPtr](Add-SignedIntAsUnsigned $TokenPrivilegesPtr ([System.Runtime.InteropServices.Marshal]::OffsetOf([Type]$TOKEN_PRIVILEGES, "Privileges")))
+                        $LuidAndAttributeSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type]$LUID_AND_ATTRIBUTES)
+                        for ($i = 0; $i -lt $TokenPrivileges.PrivilegeCount; $i++)
+                        {
+                            $LuidAndAttributePtr = [IntPtr](Add-SignedIntAsUnsigned $PrivilegesBasePtr ($LuidAndAttributeSize * $i))
+
+                            $LuidAndAttribute = [System.Runtime.InteropServices.Marshal]::PtrToStructure($LuidAndAttributePtr, [Type]$LUID_AND_ATTRIBUTES)
+
+                            #Lookup privilege name
+                            [UInt32]$PrivilegeNameSize = 60
+                            $PrivilegeNamePtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($PrivilegeNameSize)
+                            $PLuid = $LuidAndAttributePtr #The Luid structure is the first object in the LuidAndAttributes structure, so a ptr to LuidAndAttributes also points to Luid
+
+                            $Success = $LookupPrivilegeNameW.Invoke([IntPtr]::Zero, $PLuid, $PrivilegeNamePtr, [Ref]$PrivilegeNameSize)
+                            if (-not $Success)
+                            {
+                                $ErrorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+                                Write-Warning "Call to LookupPrivilegeNameW failed. Error code: $ErrorCode. RealSize: $PrivilegeNameSize"
+                            }
+                            $PrivilegeName = [System.Runtime.InteropServices.Marshal]::PtrToStringUni($PrivilegeNamePtr)
+
+                            #Get the privilege attributes
+                            $PrivilegeStatus = ""
+                            $Enabled = $false
+
+                            if ($LuidAndAttribute.Attributes -eq 0)
+                            {
+                                $Enabled = $false
+                            }
+                            if (($LuidAndAttribute.Attributes -band 0x1) -eq 0x1)
+                            {
+                                $Enabled = $true
+                            }
+                            if (($LuidAndAttribute.Attributes -band 0x2) -eq 0x2)
+                            {
+                                $Enabled = $true
+                            }
+                            if (($LuidAndAttribute.Attributes -band 0x4) -eq 0x4) #SE_PRIVILEGE_REMOVED. This should never exist. Write a warning if it is found so I can investigate why/how it was found.
+                            {
+                                Write-Warning "Unexpected behavior: Found a token with SE_PRIVILEGE_REMOVED. Please report this as a bug. "
+                            }
+
+                            if ($Enabled)
+                            {
+                                $ReturnObj.PrivilegesEnabled += ,$PrivilegeName
+                            }
+                            else
+                            {
+                                $ReturnObj.PrivilegesDisabledButAvailable += ,$PrivilegeName
+                            }
+
+                            [System.Runtime.InteropServices.Marshal]::FreeHGlobal($PrivilegeNamePtr)
+                        }
+                    }
+                    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($TokenPrivilegesPtr)
+
                 }
                 else
                 {
@@ -1453,7 +1595,11 @@ Github repo: https://github.com/clymb3r/PowerShell
             #Use the token for the selected action
             if ($CreateProcess)
             {
-                Set-DesktopACLs
+                if (-not $NoUI)
+                {
+                    Set-DesktopACLs
+                }
+
                 Create-ProcessWithToken -hToken $hToken -ProcessName $ProcessName -ProcessArgs $ProcessArgs
 
                 if ($OriginalUser -ine "SYSTEM")
