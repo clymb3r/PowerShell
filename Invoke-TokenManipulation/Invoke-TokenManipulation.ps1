@@ -40,7 +40,7 @@ Author: Joe Bialek, Twitter: @JosephBialek
 License: BSD 3-Clause
 Required Dependencies: None
 Optional Dependencies: None
-Version: 0.12
+Version: 0.13
 
 .DESCRIPTION
 
