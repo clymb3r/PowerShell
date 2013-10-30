@@ -1256,8 +1256,7 @@ Github repo: https://github.com/clymb3r/PowerShell
                 $ProcessArgsPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($ProcessArgs)
             }
 
-            #todo: protected process
-            $Success = $CreateProcessWithTokenW.Invoke($NewHToken, 0x2, $ProcessNamePtr, $ProcessArgsPtr, 0x400000, [IntPtr]::Zero, [IntPtr]::Zero, $StartupInfoPtr, $ProcessInfoPtr)
+            $Success = $CreateProcessWithTokenW.Invoke($NewHToken, 0x0, $ProcessNamePtr, $ProcessArgsPtr, 0, [IntPtr]::Zero, [IntPtr]::Zero, $StartupInfoPtr, $ProcessInfoPtr)
             if ($Success)
             {
                 #Free the handles returned in the ProcessInfo structure
