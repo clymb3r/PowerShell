@@ -854,8 +854,10 @@ Github repo: https://github.com/clymb3r/PowerShell
         $ReturnStruct | Add-Member -MemberType NoteProperty -Name hProcess -Value $hProcess
         if ($hProcess -eq [IntPtr]::Zero)
         {
+            #If a process is a protected process it cannot be enumerated. This call should only fail for protected processes.
             $ErrorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
-            Write-Warning "Failed to open process handle for ProcessId: $ProcessId. Error code: $ErrorCode"
+            Write-Verbose "Failed to open process handle for ProcessId: $ProcessId. ProcessName $((Get-Process -Id $ProcessId).Name). Error code: $ErrorCode . This is likely because this is a protected process."
+            return $null
         }
         else
         {
@@ -1285,23 +1287,6 @@ Github repo: https://github.com/clymb3r/PowerShell
                 $ErrorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
                 Write-Warning "CloseHandle failed to close NewHToken. ErrorCode: $ErrorCode"
             }
-
-            <#
-            $ProcessNamePtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($ProcessName)
-            $StartupInfoSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type]$STARTUPINFO)
-            [IntPtr]$StartupInfoPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($StartupInfoSize)
-            $memset.Invoke($StartupInfoPtr, 0, $StartupInfoSize) | Out-Null
-            [System.Runtime.InteropServices.Marshal]::WriteInt32($StartupInfoPtr, $StartupInfoSize) #The first parameter (cb) is a DWORD which is the size of the struct
-
-            $ProcessInfoSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type]$PROCESS_INFORMATION)
-            [IntPtr]$ProcessInfoPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($ProcessInfoSize)
-
-            $Success = $CreateProcessAsUserW.Invoke($NewHToken, $ProcessNamePtr, [IntPtr]::Zero, [IntPtr]::Zero, [IntPtr]::Zero, $false, 0x10, [IntPtr]::Zero, [IntPtr]::Zero, $StartupInfoPtr, $ProcessInfoPtr)
-            if (-not $Success)
-            {
-                $ErrorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
-                Write-Warning "CreateProcessAsUserW had an error. ErrorCode: $ErrorCode"
-            }#>
         }
     }
 
@@ -1350,37 +1335,43 @@ Github repo: https://github.com/clymb3r/PowerShell
         #Get all tokens
         foreach ($Process in $ProcessIds)
         {
-            [IntPtr]$hToken = [IntPtr](Get-PrimaryToken -ProcessId $Process.Id -FullPrivs).hProcToken
+            $PrimaryTokenInfo = (Get-PrimaryToken -ProcessId $Process.Id -FullPrivs)
 
-            if ($hToken -ne [IntPtr]::Zero)
+            #If a process is a protected process, it's primary token cannot be obtained. Don't try to enumerate it.
+            if ($PrimaryTokenInfo -ne $null)
             {
-                #Get the LUID corrosponding to the logon
-                $ReturnObj = Get-TokenInformation -hToken $hToken
-                if ($ReturnObj -ne $null)
-                {
-                    $ReturnObj | Add-Member -MemberType NoteProperty -Name ProcessId -Value $Process.Id
-
-                    $AllTokens += $ReturnObj
-                }
-            }
-            else
-            {
-                Write-Warning "Couldn't retrieve token for Process: $($Process.Name). ProcessId: $($Process.Id)"
-            }
-
-            foreach ($Thread in $Process.Threads)
-            {
-                $ThreadTokenInfo = Get-ThreadToken -ThreadId $Thread.Id
-                [IntPtr]$hToken = ($ThreadTokenInfo.hThreadToken)
+                [IntPtr]$hToken = [IntPtr]$PrimaryTokenInfo.hProcToken
 
                 if ($hToken -ne [IntPtr]::Zero)
                 {
+                    #Get the LUID corrosponding to the logon
                     $ReturnObj = Get-TokenInformation -hToken $hToken
                     if ($ReturnObj -ne $null)
                     {
-                        $ReturnObj | Add-Member -MemberType NoteProperty -Name ThreadId -Value $Thread.Id
-                    
+                        $ReturnObj | Add-Member -MemberType NoteProperty -Name ProcessId -Value $Process.Id
+
                         $AllTokens += $ReturnObj
+                    }
+                }
+                else
+                {
+                    Write-Warning "Couldn't retrieve token for Process: $($Process.Name). ProcessId: $($Process.Id)"
+                }
+
+                foreach ($Thread in $Process.Threads)
+                {
+                    $ThreadTokenInfo = Get-ThreadToken -ThreadId $Thread.Id
+                    [IntPtr]$hToken = ($ThreadTokenInfo.hThreadToken)
+
+                    if ($hToken -ne [IntPtr]::Zero)
+                    {
+                        $ReturnObj = Get-TokenInformation -hToken $hToken
+                        if ($ReturnObj -ne $null)
+                        {
+                            $ReturnObj | Add-Member -MemberType NoteProperty -Name ThreadId -Value $Thread.Id
+                    
+                            $AllTokens += $ReturnObj
+                        }
                     }
                 }
             }
