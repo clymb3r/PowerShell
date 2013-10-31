@@ -137,6 +137,7 @@ Lists all tokens available on the computer, including non-unique tokens and toke
 This script was inspired by incognito. 
 
 Several of the functions used in this script were written by Matt Graeber(Twitter: @mattifestation, Blog: http://www.exploit-monday.com/).
+BIG THANKS to Matt Graeber for helping debug.
 
 .LINK
 
@@ -1185,7 +1186,7 @@ Github repo: https://github.com/clymb3r/PowerShell
 
                     #Query the token privileges
                     $ReturnObj | Add-Member -Type NoteProperty -Name PrivilegesEnabled -Value @()
-                    $ReturnObj | Add-Member -Type NoteProperty -Name PrivilegesDisabledButAvailable -Value @()
+                    $ReturnObj | Add-Member -Type NoteProperty -Name PrivilegesAvailable -Value @()
 
                     [UInt32]$TokenPrivilegesSize = 1000
                     [IntPtr]$TokenPrivilegesPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TokenPrivilegesSize)
@@ -1249,7 +1250,7 @@ Github repo: https://github.com/clymb3r/PowerShell
                             }
                             else
                             {
-                                $ReturnObj.PrivilegesDisabledButAvailable += ,$PrivilegeName
+                                $ReturnObj.PrivilegesAvailable += ,$PrivilegeName
                             }
 
                             [System.Runtime.InteropServices.Marshal]::FreeHGlobal($PrivilegeNamePtr)
@@ -1292,12 +1293,15 @@ Github repo: https://github.com/clymb3r/PowerShell
             $AllTokens
         )
 
-        $TokenFilter = @{}
+        $TokenByUser = @{}
+        $TokenByEnabledPriv = @{}
+        $TokenByAvailablePriv = @{}
 
+        #Filter tokens by user
         foreach ($Token in $AllTokens)
         {
             $Key = $Token.Domain + "\" + $Token.Username
-            if (-not $TokenFilter.ContainsKey($Key))
+            if (-not $TokenByUser.ContainsKey($Key))
             {
                 #Filter out network logons and junk Windows accounts. This filter eliminates accounts which won't have creds because
                 #    they are network logons (type 3) or logons for which the creds don't matter like LOCOAL SERVICE, DWM, etc..
@@ -1305,20 +1309,72 @@ Github repo: https://github.com/clymb3r/PowerShell
                     $Token.Username -inotmatch "^DWM-\d+$" -and
                     $Token.Username -inotmatch "^LOCAL\sSERVICE$")
                 {
-                    $TokenFilter.Add($Key, $Token)
+                    $TokenByUser.Add($Key, $Token)
                 }
             }
             else
             {
-                #Make sure we are using the most ideal token
-                if($Token.IsElevated -eq $true -and $TokenFilter[$Key].IsElevated -ne $true)
+                #If Tokens have equal elevation levels, compare their privileges.
+                if($Token.IsElevated -eq $TokenByUser[$Key].IsElevated)
                 {
-                    $TokenFilter[$Key] = $Token
+                    if (($Token.PrivilegesEnabled.Count + $Token.PrivilegesAvailable.Count) -gt ($TokenByUser[$Key].PrivilegesEnabled.Count + $TokenByUser[$Key].PrivilegesAvailable.Count))
+                    {
+                        $TokenByUser[$Key] = $Token
+                    }
+                }
+                #If the new token is elevated and the current token isn't, use the new token
+                elseif (($Token.IsElevated -eq $true) -and ($TokenByUser[$Key].IsElevated -eq $false))
+                {
+                    $TokenByUser[$Key] = $Token
                 }
             }
         }
 
-        return $TokenFilter
+        #Filter tokens by privilege
+        foreach ($Token in $AllTokens)
+        {
+            $Fullname = "$($Token.Domain)\$($Token.Username)"
+
+            #Filter currently enabled privileges
+            foreach ($Privilege in $Token.PrivilegesEnabled)
+            {
+                if ($TokenByEnabledPriv.ContainsKey($Privilege))
+                {
+                    if($TokenByEnabledPriv[$Privilege] -notcontains $Fullname)
+                    {
+                        $TokenByEnabledPriv[$Privilege] += ,$Fullname
+                    }
+                }
+                else
+                {
+                    $TokenByEnabledPriv.Add($Privilege, @($Fullname))
+                }
+            }
+
+            #Filter currently available (but not enable) privileges
+            foreach ($Privilege in $Token.PrivilegesAvailable)
+            {
+                if ($TokenByAvailablePriv.ContainsKey($Privilege))
+                {
+                    if($TokenByAvailablePriv[$Privilege] -notcontains $Fullname)
+                    {
+                        $TokenByAvailablePriv[$Privilege] += ,$Fullname
+                    }
+                }
+                else
+                {
+                    $TokenByAvailablePriv.Add($Privilege, @($Fullname))
+                }
+            }
+        }
+
+        $ReturnDict = @{
+            TokenByUser = $TokenByUser
+            TokenByEnabledPriv = $TokenByEnabledPriv
+            TokenByAvailablePriv = $TokenByAvailablePriv
+        }
+
+        return (New-Object PSObject -Property $ReturnDict)
     }
 
 
@@ -1563,7 +1619,7 @@ Github repo: https://github.com/clymb3r/PowerShell
             $AllTokens = Enum-AllTokens
             
             #Select the token to use
-            $UniqueTokens = Get-UniqueTokens -AllTokens $AllTokens
+            $UniqueTokens = (Get-UniqueTokens -AllTokens $AllTokens).TokenByUser
             if ($Username -ne $null -and $Username -ne '' -and $UniqueTokens.ContainsKey($Username))
             {
                 $hToken = $UniqueTokens[$Username].hToken
@@ -1629,8 +1685,8 @@ Github repo: https://github.com/clymb3r/PowerShell
             }
             else
             {
-                $UniqueTokens = Get-UniqueTokens -AllTokens $AllTokens
-                Write-Output $UniqueTokens.Values
+                Write-Output "Unique tokens sorted by user:"
+                Write-Output (Get-UniqueTokens -AllTokens $AllTokens).TokenByUser.Values
             }
 
             if ($OriginalUser -ine "SYSTEM")
