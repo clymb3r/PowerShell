@@ -45,7 +45,7 @@ Author: Joe Bialek, Twitter: @JosephBialek
 License: BSD 3-Clause
 Required Dependencies: None
 Optional Dependencies: None
-Version: 0.14
+Version: 0.15
 
 .DESCRIPTION
 
