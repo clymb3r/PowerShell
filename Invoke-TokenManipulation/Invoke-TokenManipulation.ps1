@@ -46,7 +46,7 @@ Author: Joe Bialek, Twitter: @JosephBialek
 License: BSD 3-Clause
 Required Dependencies: None
 Optional Dependencies: None
-Version: 0.17
+Version: 0.18
 
 .DESCRIPTION
 
@@ -71,7 +71,7 @@ Switch. Will impersonate an alternate users logon token in the PowerShell thread
 	
 .PARAMETER CreateProcess
 
-Switch. Will create a new process with an alternate users logon token. Can specify the token to use by Username, ProcessId, or ThreadId.
+Specify a process to create with an alternate users logon token. Can specify the token to use by Username, ProcessId, or ThreadId.
 	
 .PARAMETER WhoAmI
 
@@ -88,10 +88,6 @@ Specify the Token to use by ProcessId. This will use the primary token of the pr
 .PARAMETER ThreadId
 
 Specify the Token to use by ThreadId. This will use the token of the thread specified.
-
-.PARAMETER ProcessName
-
-Specify the name of the process to spawn when using the -CreateProcess mode. You may need to specify the full path to the executable.
 
 .PARAMETER ProcessArgs
 
@@ -112,7 +108,7 @@ Lists all unique usable tokens on the computer.
 
 .EXAMPLE
 
-Invoke-TokenManipulation -CreateProcess -Username "nt authority\system" -ProcessName "cmd.exe"
+Invoke-TokenManipulation -CreateProcess "cmd.exe" -Username "nt authority\system"
 
 Spawns cmd.exe as SYSTEM.
 
@@ -124,7 +120,7 @@ Makes the current PowerShell thread impersonate SYSTEM.
 
 .EXAMPLE
 
-Invoke-TokenManipulation -CreateProcess -ProcessId 500 -ProcessName "cmd.exe"
+Invoke-TokenManipulation -CreateProcess "cmd.exe" -ProcessId 500
 
 Spawns cmd.exe using the primary token belonging to process ID 500.
 
@@ -166,7 +162,7 @@ Github repo: https://github.com/clymb3r/PowerShell
         $ImpersonateUser,
 
         [Parameter(ParameterSetName = "CreateProcess")]
-        [Switch]
+        [String]
         $CreateProcess,
 
         [Parameter(ParameterSetName = "WhoAmI")]
@@ -186,10 +182,6 @@ Github repo: https://github.com/clymb3r/PowerShell
         [Parameter(ParameterSetName = "ImpersonateUser")]
         [Parameter(ParameterSetName = "CreateProcess")]
         $ThreadId,
-
-        [Parameter(ParameterSetName = "CreateProcess", Mandatory=$true)]
-        [String]
-        $ProcessName,
 
         [Parameter(ParameterSetName = "CreateProcess")]
         [String]
@@ -1653,14 +1645,14 @@ Github repo: https://github.com/clymb3r/PowerShell
             }
 
             #Use the token for the selected action
-            if ($CreateProcess)
+            if ($PsCmdlet.ParameterSetName -ieq "CreateProcess")
             {
                 if (-not $NoUI)
                 {
                     Set-DesktopACLs
                 }
 
-                Create-ProcessWithToken -hToken $hToken -ProcessName $ProcessName -ProcessArgs $ProcessArgs
+                Create-ProcessWithToken -hToken $hToken -ProcessName $CreateProcess -ProcessArgs $ProcessArgs
 
                 if ($OriginalUser -ine "SYSTEM")
                 {
