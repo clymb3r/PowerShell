@@ -46,7 +46,7 @@ Author: Joe Bialek, Twitter: @JosephBialek
 License: BSD 3-Clause
 Required Dependencies: None
 Optional Dependencies: None
-Version: 0.19
+Version: 0.20
 
 .DESCRIPTION
 
@@ -1228,15 +1228,15 @@ Github repo: https://github.com/clymb3r/PowerShell
                             {
                                 $Enabled = $false
                             }
-                            if (($LuidAndAttribute.Attributes -band $Win32Constants.SE_PRIVIEGE_ENABLED_BY_DEFAULT) -eq $Win32Constants.SE_PRIVIEGE_ENABLED_BY_DEFAULT) #enabled by default
+                            if (($LuidAndAttribute.Attributes -band $Win32Constants.SE_PRIVILEGE_ENABLED_BY_DEFAULT) -eq $Win32Constants.SE_PRIVILEGE_ENABLED_BY_DEFAULT) #enabled by default
                             {
                                 $Enabled = $true
                             }
-                            if (($LuidAndAttribute.Attributes -band $Win32Constants.SE_PRIVIEGE_ENABLED) -eq $Win32Constants.SE_PRIVIEGE_ENABLED) #enabled
+                            if (($LuidAndAttribute.Attributes -band $Win32Constants.SE_PRIVILEGE_ENABLED) -eq $Win32Constants.SE_PRIVILEGE_ENABLED) #enabled
                             {
                                 $Enabled = $true
                             }
-                            if (($LuidAndAttribute.Attributes -band $Win32Constants.SE_PRIVIEGE_REMOVED) -eq $Win32Constants.SE_PRIVIEGE_REMOVED) #SE_PRIVILEGE_REMOVED. This should never exist. Write a warning if it is found so I can investigate why/how it was found.
+                            if (($LuidAndAttribute.Attributes -band $Win32Constants.SE_PRIVILEGE_REMOVED) -eq $Win32Constants.SE_PRIVILEGE_REMOVED) #SE_PRIVILEGE_REMOVED. This should never exist. Write a warning if it is found so I can investigate why/how it was found.
                             {
                                 Write-Warning "Unexpected behavior: Found a token with SE_PRIVILEGE_REMOVED. Please report this as a bug. "
                             }
