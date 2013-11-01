@@ -46,7 +46,7 @@ Author: Joe Bialek, Twitter: @JosephBialek
 License: BSD 3-Clause
 Required Dependencies: None
 Optional Dependencies: None
-Version: 0.18
+Version: 0.19
 
 .DESCRIPTION
 
@@ -267,7 +267,6 @@ Github repo: https://github.com/clymb3r/PowerShell
         TOKEN_QUERY = 8
         TOKEN_ADJUST_PRIVILEGES = 0x20
         ERROR_NO_TOKEN = 0x3f0
-        SE_PRIVILEGE_ENABLED = 2
         SECURITY_DELEGATION = 3
         DACL_SECURITY_INFORMATION = 0x4
         ACCESS_ALLOWED_ACE_TYPE = 0x0
@@ -293,6 +292,9 @@ Github repo: https://github.com/clymb3r/PowerShell
         THREAD_ALL_ACCESS = 0x1f03ff
         ERROR_INVALID_PARAMETER = 0x57
         LOGON_NETCREDENTIALS_ONLY = 0x2
+        SE_PRIVILEGE_ENABLED = 0x2
+        SE_PRIVILEGE_ENABLED_BY_DEFAULT = 0x1
+        SE_PRIVILEGE_REMOVED = 0x4
     }
 
     $Win32Constants = New-Object PSObject -Property $Constants
@@ -778,6 +780,7 @@ Github repo: https://github.com/clymb3r/PowerShell
     }
 
 
+    #Change the ACL of the WindowStation and Desktop
     function Set-DesktopACLs
     {
         Enable-SeSecurityPrivilege
@@ -885,6 +888,7 @@ Github repo: https://github.com/clymb3r/PowerShell
     }
 
 
+    #Get the primary token for the specified processId
     function Get-PrimaryToken
     {
         Param(
@@ -1224,15 +1228,15 @@ Github repo: https://github.com/clymb3r/PowerShell
                             {
                                 $Enabled = $false
                             }
-                            if (($LuidAndAttribute.Attributes -band 0x1) -eq 0x1)
+                            if (($LuidAndAttribute.Attributes -band $Win32Constants.SE_PRIVIEGE_ENABLED_BY_DEFAULT) -eq $Win32Constants.SE_PRIVIEGE_ENABLED_BY_DEFAULT) #enabled by default
                             {
                                 $Enabled = $true
                             }
-                            if (($LuidAndAttribute.Attributes -band 0x2) -eq 0x2)
+                            if (($LuidAndAttribute.Attributes -band $Win32Constants.SE_PRIVIEGE_ENABLED) -eq $Win32Constants.SE_PRIVIEGE_ENABLED) #enabled
                             {
                                 $Enabled = $true
                             }
-                            if (($LuidAndAttribute.Attributes -band 0x4) -eq 0x4) #SE_PRIVILEGE_REMOVED. This should never exist. Write a warning if it is found so I can investigate why/how it was found.
+                            if (($LuidAndAttribute.Attributes -band $Win32Constants.SE_PRIVIEGE_REMOVED) -eq $Win32Constants.SE_PRIVIEGE_REMOVED) #SE_PRIVILEGE_REMOVED. This should never exist. Write a warning if it is found so I can investigate why/how it was found.
                             {
                                 Write-Warning "Unexpected behavior: Found a token with SE_PRIVILEGE_REMOVED. Please report this as a bug. "
                             }
