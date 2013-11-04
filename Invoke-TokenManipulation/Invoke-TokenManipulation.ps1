@@ -3,8 +3,6 @@
 <#
 .SYNOPSIS
 
-THIS IS CURRENTLY IN BETA AND SOME FEATURES DONT FULLY WORK!
-
 This script requires Administrator privileges. It can enumerate the Logon Tokens available and use them to create new processes. This allows you to use
 anothers users credentials over the network by creating a process with their logon token. This will work even with Windows 8.1 LSASS protections.
 This functionality is very similar to the incognito tool (with some differences, and different use goals).
@@ -46,7 +44,7 @@ Author: Joe Bialek, Twitter: @JosephBialek
 License: BSD 3-Clause
 Required Dependencies: None
 Optional Dependencies: None
-Version: 0.21
+Version: 1.0
 
 .DESCRIPTION
 
@@ -142,9 +140,15 @@ Spawns cmd.exe using the token belonging to thread ID 500.
 
 .EXAMPLE
 
-Get-Proces lsass | Token-TokenManipulation -CreateProcess "cmd.exe"
+Get-Process lsass | Token-TokenManipulation -CreateProcess "cmd.exe"
 
 Spawns cmd.exe using the primary token of LSASS.exe. This pipes the output of Get-Process to the "-Process" parameter of the script.
+
+.EXAMPLE
+
+Get-Process lsass | Token-TokenManipulation -ImpersonateUser
+
+Makes the current thread impersonate the lsass security token.
 
 .NOTES
 This script was inspired by incognito. 
@@ -156,6 +160,7 @@ BIG THANKS to Matt Graeber for helping debug.
 
 Blog: http://clymb3r.wordpress.com/
 Github repo: https://github.com/clymb3r/PowerShell
+Blog on this script: http://clymb3r.wordpress.com/2013/11/03/powershell-and-token-impersonation/
 
 #>
 
