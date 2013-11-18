@@ -15,6 +15,7 @@
 #include <iostream>
 #include <string>
 #include <fstream>
+#include <ostream>
 #include <mutex>
 #include <Windows.h>
 #include <NTSecAPI.h>

