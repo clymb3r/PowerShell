@@ -1,0 +1,21 @@
+﻿Build started 4/3/2014 5:08:41 PM.
+     1>Project "C:\SVN\Mimikatz2\mimilib\mimilib.vcxproj" on node 3 (Build target(s)).
+     1>Link:
+         C:\WinDDK\7600.16385.1\bin\x86\x86\link.exe /ERRORREPORT:NONE /OUT:"C:\SVN\Mimikatz2\Win32\mimilib.dll" /INCREMENTAL:NO /NOLOGO /WX kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib msvcrt_win2003.obj ntdll.lib /DEF:"mimilib.def" /MANIFEST:NO /PDB:"C:\SVN\Mimikatz2\Win32\mimilib.pdb" /ASSEMBLYDEBUG:DISABLE /SUBSYSTEM:CONSOLE /OPT:REF /OPT:ICF /LTCG /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:\SVN\Mimikatz2\Win32\mimilib.lib" /MACHINE:X86 /SAFESEH:NO /DLL Win32\mimilib.res
+         Win32\kappfree.obj
+         Win32\kfilt.obj
+         Win32\kssp.obj
+         Win32\kuhl_m_sekurlsa_nt6.obj
+         Win32\kuhl_m_sekurlsa_packages.obj
+         Win32\kuhl_m_sekurlsa_utils.obj
+         Win32\kwindbg.obj
+         Win32\utils.obj
+            Creating library C:\SVN\Mimikatz2\Win32\mimilib.lib and object C:\SVN\Mimikatz2\Win32\mimilib.exp
+         Generating code
+         Finished generating code
+         mimilib.vcxproj -> C:\SVN\Mimikatz2\Win32\mimilib.dll
+     1>Done Building Project "C:\SVN\Mimikatz2\mimilib\mimilib.vcxproj" (Build target(s)).
+
+Build succeeded.
+
+Time Elapsed 00:00:00.70

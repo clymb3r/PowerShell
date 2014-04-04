@@ -1,0 +1,60 @@
+﻿Build started 4/3/2014 5:08:54 PM.
+     1>Project "C:\SVN\Mimikatz2\mimikatz\mimikatz.vcxproj" on node 2 (Build target(s)).
+     1>ClCompile:
+         C:\WinDDK\7600.16385.1\bin\x86\amd64\CL.exe /c /Zi /nologo /W3 /WX /Ox /Ob2 /Os /Oy /GL /D WIN32 /D NDEBUG /D _CONSOLE /D _WINDLL /D _UNICODE /D UNICODE /GF /Gm- /MD /GS- /Gy /fp:fast /fp:except- /Zc:wchar_t /Zc:forScope /Fo"x64\\" /Fd"x64\vcddk2003.pdb" /Gd /TC /errorReport:none ..\modules\kull_m_asn1.c modules\kuhl_m_lsadump.c
+         kull_m_asn1.c
+         kuhl_m_lsadump.c
+       Link:
+         C:\WinDDK\7600.16385.1\bin\x86\amd64\link.exe /ERRORREPORT:NONE /OUT:"C:\SVN\Mimikatz2\x64\mimikatz.dll" /INCREMENTAL:NO /NOLOGO /WX crypt32.lib cryptdll.lib shlwapi.lib samlib.lib secur32.lib version.lib advapi32.hash.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib msvcrt_win2003.obj ntdll.lib /MANIFEST:NO /PDB:"C:\SVN\Mimikatz2\x64\mimikatz.pdb" /ASSEMBLYDEBUG:DISABLE /SUBSYSTEM:CONSOLE /OPT:REF /OPT:ICF /LTCG /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:\SVN\Mimikatz2\x64\mimikatz.lib" /MACHINE:X64 /SAFESEH:NO /DLL x64\mimikatz.res
+         x64\kull_m_asn1.obj
+         x64\kull_m_file.obj
+         x64\kull_m_handle.obj
+         x64\kull_m_kernel.obj
+         x64\kull_m_net.obj
+         x64\kull_m_memory.obj
+         x64\kull_m_minidump.obj
+         x64\kull_m_output.obj
+         x64\kull_m_patch.obj
+         x64\kull_m_process.obj
+         x64\kull_m_registry.obj
+         x64\kull_m_service.obj
+         x64\kull_m_string.obj
+         x64\kull_m_token.obj
+         x64\mimikatz.obj
+         x64\kuhl_m_kerberos.obj
+         x64\kuhl_m_kerberos_pac.obj
+         x64\kuhl_m_kerberos_ticket.obj
+         x64\kuhl_m_crypto.obj
+         x64\kuhl_m_event.obj
+         x64\kuhl_m_kernel.obj
+         x64\kuhl_m_lsadump.obj
+         x64\kuhl_m_misc.obj
+         x64\kuhl_m_net.obj
+         x64\kuhl_m_privilege.obj
+         x64\kuhl_m_process.obj
+         x64\kuhl_m_service.obj
+         x64\kuhl_m_standard.obj
+         x64\kuhl_m_token.obj
+         x64\kuhl_m_ts.obj
+         x64\kuhl_m_vault.obj
+         x64\kuhl_m_sekurlsa_nt5.obj
+         x64\kuhl_m_sekurlsa_nt6.obj
+         x64\kuhl_m_sekurlsa_nt63.obj
+         x64\kuhl_m_sekurlsa.obj
+         x64\kuhl_m_sekurlsa_utils.obj
+         x64\kuhl_m_sekurlsa_dpapi.obj
+         x64\kuhl_m_sekurlsa_kerberos.obj
+         x64\kuhl_m_sekurlsa_livessp.obj
+         x64\kuhl_m_sekurlsa_msv1_0.obj
+         x64\kuhl_m_sekurlsa_ssp.obj
+         x64\kuhl_m_sekurlsa_tspkg.obj
+         x64\kuhl_m_sekurlsa_wdigest.obj
+            Creating library C:\SVN\Mimikatz2\x64\mimikatz.lib and object C:\SVN\Mimikatz2\x64\mimikatz.exp
+         Generating code
+         Finished generating code
+         mimikatz.vcxproj -> C:\SVN\Mimikatz2\x64\mimikatz.dll
+     1>Done Building Project "C:\SVN\Mimikatz2\mimikatz\mimikatz.vcxproj" (Build target(s)).
+
+Build succeeded.
+
+Time Elapsed 00:00:01.83
