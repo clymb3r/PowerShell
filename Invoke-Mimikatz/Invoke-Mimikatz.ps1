@@ -15,9 +15,9 @@ Mimikatz Author: Benjamin DELPY `gentilkiwi`. Blog: http://blog.gentilkiwi.com. 
 License:  http://creativecommons.org/licenses/by/3.0/fr/
 Required Dependencies: Mimikatz (included)
 Optional Dependencies: None
-Version: 1.2
+Version: 1.3
 ReflectivePEInjection version: 1.1
-Mimikatz version: 2.0 alpha (4/3/2014)
+Mimikatz version: 2.0 alpha (5/4/2014)
 
 .DESCRIPTION
 
