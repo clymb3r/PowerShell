@@ -191,7 +191,11 @@ Param(
 	
 	[Parameter(Position = 5)]
 	[String]
-	$ProcName
+	$ProcName,
+
+    [Parameter(Position = 6)]
+    [Switch]
+    $ForceASLR
 )
 
 Set-StrictMode -Version 2
@@ -204,17 +208,21 @@ $RemoteScriptBlock = {
 		[Byte[]]
 		$PEBytes,
 		
-		[Parameter(Position = 1, Mandatory = $false)]
+		[Parameter(Position = 1, Mandatory = $true)]
 		[String]
 		$FuncReturnType,
 				
-		[Parameter(Position = 2, Mandatory = $false)]
+		[Parameter(Position = 2, Mandatory = $true)]
 		[Int32]
 		$ProcId,
 		
-		[Parameter(Position = 3, Mandatory = $false)]
+		[Parameter(Position = 3, Mandatory = $true)]
 		[String]
-		$ProcName
+		$ProcName,
+
+        [Parameter(Position = 4, Mandatory = $true)]
+        [Bool]
+        $ForceASLR
 	)
 	
 	###################################
@@ -618,10 +626,10 @@ $RemoteScriptBlock = {
 		$GetProcAddress = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($GetProcAddressAddr, $GetProcAddressDelegate)
 		$Win32Functions | Add-Member -MemberType NoteProperty -Name GetProcAddress -Value $GetProcAddress
 		
-		$GetProcAddressOrdinalAddr = Get-ProcAddress kernel32.dll GetProcAddress
-		$GetProcAddressOrdinalDelegate = Get-DelegateType @([IntPtr], [IntPtr]) ([IntPtr])
-		$GetProcAddressOrdinal = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($GetProcAddressOrdinalAddr, $GetProcAddressOrdinalDelegate)
-		$Win32Functions | Add-Member -MemberType NoteProperty -Name GetProcAddressOrdinal -Value $GetProcAddressOrdinal
+		$GetProcAddressIntPtrAddr = Get-ProcAddress kernel32.dll GetProcAddress #This is still GetProcAddress, but instead of PowerShell converting the string to a pointer, you must do it yourself
+		$GetProcAddressIntPtrDelegate = Get-DelegateType @([IntPtr], [IntPtr]) ([IntPtr])
+		$GetProcAddressIntPtr = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($GetProcAddressIntPtrAddr, $GetProcAddressIntPtrDelegate)
+		$Win32Functions | Add-Member -MemberType NoteProperty -Name GetProcAddressIntPtr -Value $GetProcAddressIntPtr
 		
 		$VirtualFreeAddr = Get-ProcAddress kernel32.dll VirtualFree
 		$VirtualFreeDelegate = Get-DelegateType @([IntPtr], [UIntPtr], [UInt32]) ([Bool])
@@ -1413,32 +1421,46 @@ $RemoteScriptBlock = {
 		$RemoteDllHandle,
 		
 		[Parameter(Position=2, Mandatory=$true)]
-		[String]
-		$FunctionName
+		[IntPtr]
+		$FunctionNamePtr,#This can either be a ptr to a string which is the function name, or, if LoadByOrdinal is 'true' this is an ordinal number (points to nothing)
+
+        [Parameter(Position=3, Mandatory=$true)]
+        [Bool]
+        $LoadByOrdinal
 		)
 
 		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr])
-		$FunctionNamePtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalAnsi($FunctionName)
-		
-		#Write FunctionName to memory (will be used in GetProcAddress)
-		$FunctionNameSize = [UIntPtr][UInt64]([UInt64]$FunctionName.Length + 1)
-		$RFuncNamePtr = $Win32Functions.VirtualAllocEx.Invoke($RemoteProcHandle, [IntPtr]::Zero, $FunctionNameSize, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
-		if ($RFuncNamePtr -eq [IntPtr]::Zero)
-		{
-			Throw "Unable to allocate memory in the remote process"
-		}
+		[IntPtr]$RFuncNamePtr = [IntPtr]::Zero   #Pointer to the function name in remote process memory if loading by function name, ordinal number if loading by ordinal
+        #If not loading by ordinal, write the function name to the remote process memory
+        if (-not $LoadByOrdinal)
+        {
+        	$FunctionName = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($FunctionNamePtr)
 
-		[UIntPtr]$NumBytesWritten = [UIntPtr]::Zero
-		$Success = $Win32Functions.WriteProcessMemory.Invoke($RemoteProcHandle, $RFuncNamePtr, $FunctionNamePtr, $FunctionNameSize, [Ref]$NumBytesWritten)
-		[System.Runtime.InteropServices.Marshal]::FreeHGlobal($FunctionNamePtr)
-		if ($Success -eq $false)
-		{
-			Throw "Unable to write DLL path to remote process memory"
-		}
-		if ($FunctionNameSize -ne $NumBytesWritten)
-		{
-			Throw "Didn't write the expected amount of bytes when writing a DLL path to load to the remote process"
-		}
+		    #Write FunctionName to memory (will be used in GetProcAddress)
+		    $FunctionNameSize = [UIntPtr][UInt64]([UInt64]$FunctionName.Length + 1)
+		    $RFuncNamePtr = $Win32Functions.VirtualAllocEx.Invoke($RemoteProcHandle, [IntPtr]::Zero, $FunctionNameSize, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
+		    if ($RFuncNamePtr -eq [IntPtr]::Zero)
+		    {
+			    Throw "Unable to allocate memory in the remote process"
+		    }
+
+		    [UIntPtr]$NumBytesWritten = [UIntPtr]::Zero
+		    $Success = $Win32Functions.WriteProcessMemory.Invoke($RemoteProcHandle, $RFuncNamePtr, $FunctionNamePtr, $FunctionNameSize, [Ref]$NumBytesWritten)
+		    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($FunctionNamePtr)
+		    if ($Success -eq $false)
+		    {
+			    Throw "Unable to write DLL path to remote process memory"
+		    }
+		    if ($FunctionNameSize -ne $NumBytesWritten)
+		    {
+			    Throw "Didn't write the expected amount of bytes when writing a DLL path to load to the remote process"
+		    }
+        }
+        #If loading by ordinal, just set RFuncNamePtr to be the ordinal number
+        else
+        {
+            $RFuncNamePtr = $FunctionNamePtr
+        }
 		
 		#Get address of GetProcAddress
 		$Kernel32Handle = $Win32Functions.GetModuleHandle.Invoke("kernel32.dll")
@@ -1773,34 +1795,56 @@ $RemoteScriptBlock = {
 				
 				while ($OriginalThunkRefVal -ne [IntPtr]::Zero)
 				{
-					$ProcedureName = ''
+                    $LoadByOrdinal = $false
+                    [IntPtr]$ProcedureNamePtr = [IntPtr]::Zero
 					#Compare thunkRefVal to IMAGE_ORDINAL_FLAG, which is defined as 0x80000000 or 0x8000000000000000 depending on 32bit or 64bit
 					#	If the top bit is set on an int, it will be negative, so instead of worrying about casting this to uint
 					#	and doing the comparison, just see if it is less than 0
 					[IntPtr]$NewThunkRef = [IntPtr]::Zero
-					if([Int64]$OriginalThunkRefVal -lt 0)
+					if([System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr]) -eq 4 -and [Int32]$OriginalThunkRefVal -lt 0)
 					{
-						$ProcedureName = [Int64]$OriginalThunkRefVal -band 0xffff #This is actually a lookup by ordinal
+						[IntPtr]$ProcedureNamePtr = [IntPtr]$OriginalThunkRefVal -band 0xffff #This is actually a lookup by ordinal
+                        $LoadByOrdinal = $true
+					}
+                    elseif([System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr]) -eq 8 -and [Int64]$OriginalThunkRefVal -lt 0)
+					{
+						[IntPtr]$ProcedureNamePtr = [Int64]$OriginalThunkRefVal -band 0xffff #This is actually a lookup by ordinal
+                        $LoadByOrdinal = $true
 					}
 					else
 					{
 						[IntPtr]$StringAddr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($OriginalThunkRefVal)
 						$StringAddr = Add-SignedIntAsUnsigned $StringAddr ([System.Runtime.InteropServices.Marshal]::SizeOf([Type][UInt16]))
 						$ProcedureName = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($StringAddr)
+                        $ProcedureNamePtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalAnsi($ProcedureName)
 					}
 					
 					if ($RemoteLoading -eq $true)
 					{
-						[IntPtr]$NewThunkRef = Get-RemoteProcAddress -RemoteProcHandle $RemoteProcHandle -RemoteDllHandle $ImportDllHandle -FunctionName $ProcedureName
+						[IntPtr]$NewThunkRef = Get-RemoteProcAddress -RemoteProcHandle $RemoteProcHandle -RemoteDllHandle $ImportDllHandle -FunctionNamePtr $ProcedureNamePtr -LoadByOrdinal $LoadByOrdinal
 					}
 					else
 					{
-						[IntPtr]$NewThunkRef = $Win32Functions.GetProcAddress.Invoke($ImportDllHandle, $ProcedureName)
+				        [IntPtr]$NewThunkRef = $Win32Functions.GetProcAddressIntPtr.Invoke($ImportDllHandle, $ProcedureNamePtr)
 					}
+
+                    #If loading by ordinal, ProcedureNamePtr is the ordinal value and not actually a pointer to a buffer that needs to be freed
+                    if (-not $LoadByOrdinal -and $ProcedureNamePtr -ne [IntPtr]::Zero)
+                    {
+                        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ProcedureNamePtr)
+                        $ProcedureNamePtr = [IntPtr]::Zero
+                    }
 					
 					if ($NewThunkRef -eq $null -or $NewThunkRef -eq [IntPtr]::Zero)
 					{
-						Throw "New function reference is null, this is almost certainly a bug in this script. Function: $ProcedureName. Dll: $ImportDllPath"
+                        if ($LoadByOrdinal)
+                        {
+                            Throw "New function reference is null, this is almost certainly a bug in this script. Function Ordinal: $ProcedureNamePtr. Dll: $ImportDllPath"
+                        }
+                        else
+                        {
+						    Throw "New function reference is null, this is almost certainly a bug in this script. Function: $ProcedureName. Dll: $ImportDllPath"
+                        }
 					}
 
 					[System.Runtime.InteropServices.Marshal]::StructureToPtr($NewThunkRef, $ThunkRef, $false)
@@ -2268,7 +2312,11 @@ $RemoteScriptBlock = {
 		
 		[Parameter(Position = 2, Mandatory = $false)]
 		[IntPtr]
-		$RemoteProcHandle
+		$RemoteProcHandle,
+
+        [Parameter(Position = 3)]
+        [Bool]
+        $ForceASLR = $false
 		)
 		
 		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr])
@@ -2347,11 +2395,16 @@ $RemoteScriptBlock = {
 		Write-Verbose "Allocating memory for the PE and write its headers to memory"
 		
 		[IntPtr]$LoadAddr = [IntPtr]::Zero
-		if (($PEInfo.DllCharacteristics -band $Win32Constants.IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE) -ne $Win32Constants.IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE)
+        $PESupportsASLR = ($PEInfo.DllCharacteristics -band $Win32Constants.IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE) -eq $Win32Constants.IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
+		if ((-not $ForceASLR) -and (-not $PESupportsASLR))
 		{
-			Write-Warning "PE file being reflectively loaded is not ASLR compatible. If the loading fails, try restarting PowerShell and trying again" -WarningAction Continue
+			Write-Warning "PE file being reflectively loaded is not ASLR compatible. If the loading fails, try restarting PowerShell and trying again OR try using the -ForceASLR flag (could cause crashes)" -WarningAction Continue
 			[IntPtr]$LoadAddr = $OriginalImageBase
 		}
+        elseif ($ForceASLR -and (-not $PESupportsASLR))
+        {
+            Write-Verbose "PE file doesn't support ASLR but -ForceASLR is set. Forcing ASLR on the PE file. This could result in a crash."
+        }
 
 		$PEHandle = [IntPtr]::Zero				#This is where the PE is allocated in PowerShell
 		$EffectivePEHandle = [IntPtr]::Zero		#This is the address the PE will be loaded to. If it is loaded in PowerShell, this equals $PEHandle. If it is loaded in a remote process, this is the address in the remote process.
@@ -2677,11 +2730,11 @@ $RemoteScriptBlock = {
 		$PEHandle = [IntPtr]::Zero
 		if ($RemoteProcHandle -eq [IntPtr]::Zero)
 		{
-			$PELoadedInfo = Invoke-MemoryLoadLibrary -PEBytes $PEBytes -ExeArgs $ExeArgs
+			$PELoadedInfo = Invoke-MemoryLoadLibrary -PEBytes $PEBytes -ExeArgs $ExeArgs -ForceASLR $ForceASLR
 		}
 		else
 		{
-			$PELoadedInfo = Invoke-MemoryLoadLibrary -PEBytes $PEBytes -ExeArgs $ExeArgs -RemoteProcHandle $RemoteProcHandle
+			$PELoadedInfo = Invoke-MemoryLoadLibrary -PEBytes $PEBytes -ExeArgs $ExeArgs -RemoteProcHandle $RemoteProcHandle -ForceASLR $ForceASLR
 		}
 		if ($PELoadedInfo -eq [IntPtr]::Zero)
 		{
@@ -2831,11 +2884,11 @@ Function Main
 
 	if ($ComputerName -eq $null -or $ComputerName -imatch "^\s*$")
 	{
-		Invoke-Command -ScriptBlock $RemoteScriptBlock -ArgumentList @($PEBytes, $FuncReturnType, $ProcId, $ProcName)
+		Invoke-Command -ScriptBlock $RemoteScriptBlock -ArgumentList @($PEBytes, $FuncReturnType, $ProcId, $ProcName,$ForceASLR)
 	}
 	else
 	{
-		Invoke-Command -ScriptBlock $RemoteScriptBlock -ArgumentList @($PEBytes, $FuncReturnType, $ProcId, $ProcName) -ComputerName $ComputerName
+		Invoke-Command -ScriptBlock $RemoteScriptBlock -ArgumentList @($PEBytes, $FuncReturnType, $ProcId, $ProcName,$ForceASLR) -ComputerName $ComputerName
 	}
 }
 
