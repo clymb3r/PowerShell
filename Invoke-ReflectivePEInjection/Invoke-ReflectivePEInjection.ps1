@@ -33,7 +33,7 @@ Author: Joe Bialek, Twitter: @JosephBialek
 License: BSD 3-Clause
 Required Dependencies: None
 Optional Dependencies: None
-Version: 1.1
+Version: 1.2
 
 .DESCRIPTION
 
@@ -68,6 +68,12 @@ Optional, the name of the remote process to inject the DLL in to. If not injecti
 .PARAMETER ProcId
 
 Optional, the process ID of the remote process to inject the DLL in to. If not injecting in to remote process, ignore this.
+
+.PARAMETER ForceASLR
+
+Optional, will force the use of ASLR on the PE being loaded even if the PE indicates it doesn't support ASLR. Some PE's will work with ASLR even
+    if the compiler flags don't indicate they support it. Other PE's will simply crash. Make sure to test this prior to using. Has no effect when
+    loading in to a remote process.
 	
 .EXAMPLE
 
@@ -90,6 +96,11 @@ Invoke-ReflectivePEInjection -PEPath DemoDLL.dll -FuncReturnType WString -Comput
 
 Load DemoEXE and run it locally.
 Invoke-ReflectivePEInjection -PEPath DemoEXE.exe -ExeArgs "Arg1 Arg2 Arg3 Arg4"
+
+.EXAMPLE
+
+Load DemoEXE and run it locally. Forces ASLR on for the EXE.
+Invoke-ReflectivePEInjection -PEPath DemoEXE.exe -ExeArgs "Arg1 Arg2 Arg3 Arg4" -ForceASLR
 
 .EXAMPLE
 
@@ -2814,14 +2825,15 @@ $RemoteScriptBlock = {
 			$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $VoidFuncAddr -Win32Functions $Win32Functions
 		}
 		
-		#Don't free a library if it is injected in a remote process
-		if ($RemoteProcHandle -eq [IntPtr]::Zero)
+		#Don't free a library if it is injected in a remote process or if it is an EXE.
+        #Note that all DLL's loaded by the EXE will remain loaded in memory.
+		if ($RemoteProcHandle -eq [IntPtr]::Zero -and $PEInfo.FileType -ieq "DLL")
 		{
 			Invoke-MemoryFreeLibrary -PEHandle $PEHandle
 		}
 		else
 		{
-			#Just delete the memory allocated in PowerShell to build the PE before injecting to remote process
+			#Delete the PE file from memory.
 			$Success = $Win32Functions.VirtualFree.Invoke($PEHandle, [UInt64]0, $Win32Constants.MEM_RELEASE)
 			if ($Success -eq $false)
 			{
