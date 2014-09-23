@@ -156,7 +156,7 @@ Spawns cmd.exe using the primary token of LSASS.exe. This pipes the output of Ge
 
 .EXAMPLE
 
-(Get-Process wininit | Invoke-TokenManipulation -CreateProcess "cmd.exe").WaitForExit()
+(Get-Process wininit | Invoke-TokenManipulation -CreateProcess "cmd.exe" -PassThru).WaitForExit()
 
 Spawns cmd.exe using the primary token of LSASS.exe. Then holds the spawning PowerShell session until that process has exited.
 
