@@ -1,4 +1,4 @@
-function global:Invoke-TokenManipulation
+function Invoke-TokenManipulation
 {
 <#
 .SYNOPSIS
