@@ -1547,7 +1547,7 @@ $RemoteScriptBlock = {
 		{
 			Throw "Unable to allocate memory in the remote process for shellcode"
 		}
-		
+		[UIntPtr]$NumBytesWritten = [UIntPtr]::Zero
 		$Success = $Win32Functions.WriteProcessMemory.Invoke($RemoteProcHandle, $RSCAddr, $SCPSMemOriginal, [UIntPtr][UInt64]$SCLength, [Ref]$NumBytesWritten)
 		if (($Success -eq $false) -or ([UInt64]$NumBytesWritten -ne [UInt64]$SCLength))
 		{
