@@ -33,7 +33,7 @@ Author: Joe Bialek, Twitter: @JosephBialek
 License: BSD 3-Clause
 Required Dependencies: None
 Optional Dependencies: None
-Version: 1.2
+Version: 1.3
 
 .DESCRIPTION
 
