@@ -72,11 +72,11 @@ Switch. Enumerate all Logon Tokens (including non-unique tokens and NetworkLogon
 
 Switch. Will impersonate an alternate users logon token in the PowerShell thread. Can specify the token to use by Username, ProcessId, or ThreadId.
     This mode is not recommended because PowerShell is heavily threaded and many actions won't be done in the current thread. Use CreateProcess instead.
-	
+    
 .PARAMETER CreateProcess
 
 Specify a process to create with an alternate users logon token. Can specify the token to use by Username, ProcessId, or ThreadId.
-	
+    
 .PARAMETER WhoAmI
 
 Switch. Displays the credentials the PowerShell thread is running under.
@@ -111,7 +111,7 @@ to "Everyone".
 
 If you are creating a process, this will pass the System.Diagnostics.Process object to the pipeline.
 
-	
+    
 .EXAMPLE
 
 Invoke-TokenManipulation -Enumerate
@@ -286,17 +286,17 @@ Blog on this script: http://clymb3r.wordpress.com/2013/11/03/powershell-and-toke
     ###############################
     #Win32Structures
     ###############################
-	#Define all the structures/enums that will be used
-	#	This article shows you how to do this with reflection: http://www.exploit-monday.com/2012/07/structs-and-enums-using-reflection.html
-	$Domain = [AppDomain]::CurrentDomain
-	$DynamicAssembly = New-Object System.Reflection.AssemblyName('DynamicAssembly')
-	$AssemblyBuilder = $Domain.DefineDynamicAssembly($DynamicAssembly, [System.Reflection.Emit.AssemblyBuilderAccess]::Run)
-	$ModuleBuilder = $AssemblyBuilder.DefineDynamicModule('DynamicModule', $false)
-	$ConstructorInfo = [System.Runtime.InteropServices.MarshalAsAttribute].GetConstructors()[0]
+    #Define all the structures/enums that will be used
+    #    This article shows you how to do this with reflection: http://www.exploit-monday.com/2012/07/structs-and-enums-using-reflection.html
+    $Domain = [AppDomain]::CurrentDomain
+    $DynamicAssembly = New-Object System.Reflection.AssemblyName('DynamicAssembly')
+    $AssemblyBuilder = $Domain.DefineDynamicAssembly($DynamicAssembly, [System.Reflection.Emit.AssemblyBuilderAccess]::Run)
+    $ModuleBuilder = $AssemblyBuilder.DefineDynamicModule('DynamicModule', $false)
+    $ConstructorInfo = [System.Runtime.InteropServices.MarshalAsAttribute].GetConstructors()[0]
 
     #ENUMs
-	$TypeBuilder = $ModuleBuilder.DefineEnum('TOKEN_INFORMATION_CLASS', 'Public', [UInt32])
-	$TypeBuilder.DefineLiteral('TokenUser', [UInt32] 1) | Out-Null
+    $TypeBuilder = $ModuleBuilder.DefineEnum('TOKEN_INFORMATION_CLASS', 'Public', [UInt32])
+    $TypeBuilder.DefineLiteral('TokenUser', [UInt32] 1) | Out-Null
     $TypeBuilder.DefineLiteral('TokenGroups', [UInt32] 2) | Out-Null
     $TypeBuilder.DefineLiteral('TokenPrivileges', [UInt32] 3) | Out-Null
     $TypeBuilder.DefineLiteral('TokenOwner', [UInt32] 4) | Out-Null
@@ -337,27 +337,27 @@ Blog on this script: http://clymb3r.wordpress.com/2013/11/03/powershell-and-toke
     $TypeBuilder.DefineLiteral('TokenSecurityAttributes', [UInt32] 39) | Out-Null
     $TypeBuilder.DefineLiteral('TokenIsRestricted', [UInt32] 40) | Out-Null
     $TypeBuilder.DefineLiteral('MaxTokenInfoClass', [UInt32] 41) | Out-Null
-	$TOKEN_INFORMATION_CLASS = $TypeBuilder.CreateType()
+    $TOKEN_INFORMATION_CLASS = $TypeBuilder.CreateType()
 
     #STRUCTs
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
-	$TypeBuilder = $ModuleBuilder.DefineType('LARGE_INTEGER', $Attributes, [System.ValueType], 8)
-	$TypeBuilder.DefineField('LowPart', [UInt32], 'Public') | Out-Null
-	$TypeBuilder.DefineField('HighPart', [UInt32], 'Public') | Out-Null
-	$LARGE_INTEGER = $TypeBuilder.CreateType()
+    $TypeBuilder = $ModuleBuilder.DefineType('LARGE_INTEGER', $Attributes, [System.ValueType], 8)
+    $TypeBuilder.DefineField('LowPart', [UInt32], 'Public') | Out-Null
+    $TypeBuilder.DefineField('HighPart', [UInt32], 'Public') | Out-Null
+    $LARGE_INTEGER = $TypeBuilder.CreateType()
 
     #Struct LUID
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
-	$TypeBuilder = $ModuleBuilder.DefineType('LUID', $Attributes, [System.ValueType], 8)
-	$TypeBuilder.DefineField('LowPart', [UInt32], 'Public') | Out-Null
-	$TypeBuilder.DefineField('HighPart', [Int32], 'Public') | Out-Null
-	$LUID = $TypeBuilder.CreateType()
+    $TypeBuilder = $ModuleBuilder.DefineType('LUID', $Attributes, [System.ValueType], 8)
+    $TypeBuilder.DefineField('LowPart', [UInt32], 'Public') | Out-Null
+    $TypeBuilder.DefineField('HighPart', [Int32], 'Public') | Out-Null
+    $LUID = $TypeBuilder.CreateType()
 
     #Struct TOKEN_STATISTICS
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
-	$TypeBuilder = $ModuleBuilder.DefineType('TOKEN_STATISTICS', $Attributes, [System.ValueType])
-	$TypeBuilder.DefineField('TokenId', $LUID, 'Public') | Out-Null
-	$TypeBuilder.DefineField('AuthenticationId', $LUID, 'Public') | Out-Null
+    $TypeBuilder = $ModuleBuilder.DefineType('TOKEN_STATISTICS', $Attributes, [System.ValueType])
+    $TypeBuilder.DefineField('TokenId', $LUID, 'Public') | Out-Null
+    $TypeBuilder.DefineField('AuthenticationId', $LUID, 'Public') | Out-Null
     $TypeBuilder.DefineField('ExpirationTime', $LARGE_INTEGER, 'Public') | Out-Null
     $TypeBuilder.DefineField('TokenType', [UInt32], 'Public') | Out-Null
     $TypeBuilder.DefineField('ImpersonationLevel', [UInt32], 'Public') | Out-Null
@@ -366,29 +366,29 @@ Blog on this script: http://clymb3r.wordpress.com/2013/11/03/powershell-and-toke
     $TypeBuilder.DefineField('GroupCount', [UInt32], 'Public') | Out-Null
     $TypeBuilder.DefineField('PrivilegeCount', [UInt32], 'Public') | Out-Null
     $TypeBuilder.DefineField('ModifiedId', $LUID, 'Public') | Out-Null
-	$TOKEN_STATISTICS = $TypeBuilder.CreateType()
+    $TOKEN_STATISTICS = $TypeBuilder.CreateType()
 
     #Struct LSA_UNICODE_STRING
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
-	$TypeBuilder = $ModuleBuilder.DefineType('LSA_UNICODE_STRING', $Attributes, [System.ValueType])
-	$TypeBuilder.DefineField('Length', [UInt16], 'Public') | Out-Null
-	$TypeBuilder.DefineField('MaximumLength', [UInt16], 'Public') | Out-Null
+    $TypeBuilder = $ModuleBuilder.DefineType('LSA_UNICODE_STRING', $Attributes, [System.ValueType])
+    $TypeBuilder.DefineField('Length', [UInt16], 'Public') | Out-Null
+    $TypeBuilder.DefineField('MaximumLength', [UInt16], 'Public') | Out-Null
     $TypeBuilder.DefineField('Buffer', [IntPtr], 'Public') | Out-Null
-	$LSA_UNICODE_STRING = $TypeBuilder.CreateType()
+    $LSA_UNICODE_STRING = $TypeBuilder.CreateType()
 
     #Struct LSA_LAST_INTER_LOGON_INFO
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
-	$TypeBuilder = $ModuleBuilder.DefineType('LSA_LAST_INTER_LOGON_INFO', $Attributes, [System.ValueType])
-	$TypeBuilder.DefineField('LastSuccessfulLogon', $LARGE_INTEGER, 'Public') | Out-Null
-	$TypeBuilder.DefineField('LastFailedLogon', $LARGE_INTEGER, 'Public') | Out-Null
+    $TypeBuilder = $ModuleBuilder.DefineType('LSA_LAST_INTER_LOGON_INFO', $Attributes, [System.ValueType])
+    $TypeBuilder.DefineField('LastSuccessfulLogon', $LARGE_INTEGER, 'Public') | Out-Null
+    $TypeBuilder.DefineField('LastFailedLogon', $LARGE_INTEGER, 'Public') | Out-Null
     $TypeBuilder.DefineField('FailedAttemptCountSinceLastSuccessfulLogon', [UInt32], 'Public') | Out-Null
-	$LSA_LAST_INTER_LOGON_INFO = $TypeBuilder.CreateType()
+    $LSA_LAST_INTER_LOGON_INFO = $TypeBuilder.CreateType()
 
     #Struct SECURITY_LOGON_SESSION_DATA
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
-	$TypeBuilder = $ModuleBuilder.DefineType('SECURITY_LOGON_SESSION_DATA', $Attributes, [System.ValueType])
-	$TypeBuilder.DefineField('Size', [UInt32], 'Public') | Out-Null
-	$TypeBuilder.DefineField('LoginID', $LUID, 'Public') | Out-Null
+    $TypeBuilder = $ModuleBuilder.DefineType('SECURITY_LOGON_SESSION_DATA', $Attributes, [System.ValueType])
+    $TypeBuilder.DefineField('Size', [UInt32], 'Public') | Out-Null
+    $TypeBuilder.DefineField('LoginID', $LUID, 'Public') | Out-Null
     $TypeBuilder.DefineField('Username', $LSA_UNICODE_STRING, 'Public') | Out-Null
     $TypeBuilder.DefineField('LoginDomain', $LSA_UNICODE_STRING, 'Public') | Out-Null
     $TypeBuilder.DefineField('AuthenticationPackage', $LSA_UNICODE_STRING, 'Public') | Out-Null
@@ -410,13 +410,13 @@ Blog on this script: http://clymb3r.wordpress.com/2013/11/03/powershell-and-toke
     $TypeBuilder.DefineField('PasswordLastSet', $LARGE_INTEGER, 'Public') | Out-Null
     $TypeBuilder.DefineField('PasswordCanChange', $LARGE_INTEGER, 'Public') | Out-Null
     $TypeBuilder.DefineField('PasswordMustChange', $LARGE_INTEGER, 'Public') | Out-Null
-	$SECURITY_LOGON_SESSION_DATA = $TypeBuilder.CreateType()
+    $SECURITY_LOGON_SESSION_DATA = $TypeBuilder.CreateType()
 
     #Struct STARTUPINFO
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
-	$TypeBuilder = $ModuleBuilder.DefineType('STARTUPINFO', $Attributes, [System.ValueType])
-	$TypeBuilder.DefineField('cb', [UInt32], 'Public') | Out-Null
-	$TypeBuilder.DefineField('lpReserved', [IntPtr], 'Public') | Out-Null
+    $TypeBuilder = $ModuleBuilder.DefineType('STARTUPINFO', $Attributes, [System.ValueType])
+    $TypeBuilder.DefineField('cb', [UInt32], 'Public') | Out-Null
+    $TypeBuilder.DefineField('lpReserved', [IntPtr], 'Public') | Out-Null
     $TypeBuilder.DefineField('lpDesktop', [IntPtr], 'Public') | Out-Null
     $TypeBuilder.DefineField('lpTitle', [IntPtr], 'Public') | Out-Null
     $TypeBuilder.DefineField('dwX', [UInt32], 'Public') | Out-Null
@@ -433,22 +433,22 @@ Blog on this script: http://clymb3r.wordpress.com/2013/11/03/powershell-and-toke
     $TypeBuilder.DefineField('hStdInput', [IntPtr], 'Public') | Out-Null
     $TypeBuilder.DefineField('hStdOutput', [IntPtr], 'Public') | Out-Null
     $TypeBuilder.DefineField('hStdError', [IntPtr], 'Public') | Out-Null
-	$STARTUPINFO = $TypeBuilder.CreateType()
+    $STARTUPINFO = $TypeBuilder.CreateType()
 
     #Struct PROCESS_INFORMATION
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
-	$TypeBuilder = $ModuleBuilder.DefineType('PROCESS_INFORMATION', $Attributes, [System.ValueType])
-	$TypeBuilder.DefineField('hProcess', [IntPtr], 'Public') | Out-Null
-	$TypeBuilder.DefineField('hThread', [IntPtr], 'Public') | Out-Null
+    $TypeBuilder = $ModuleBuilder.DefineType('PROCESS_INFORMATION', $Attributes, [System.ValueType])
+    $TypeBuilder.DefineField('hProcess', [IntPtr], 'Public') | Out-Null
+    $TypeBuilder.DefineField('hThread', [IntPtr], 'Public') | Out-Null
     $TypeBuilder.DefineField('dwProcessId', [UInt32], 'Public') | Out-Null
     $TypeBuilder.DefineField('dwThreadId', [UInt32], 'Public') | Out-Null
-	$PROCESS_INFORMATION = $TypeBuilder.CreateType()
+    $PROCESS_INFORMATION = $TypeBuilder.CreateType()
 
     #Struct TOKEN_ELEVATION
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
-	$TypeBuilder = $ModuleBuilder.DefineType('TOKEN_ELEVATION', $Attributes, [System.ValueType])
-	$TypeBuilder.DefineField('TokenIsElevated', [UInt32], 'Public') | Out-Null
-	$TOKEN_ELEVATION = $TypeBuilder.CreateType()
+    $TypeBuilder = $ModuleBuilder.DefineType('TOKEN_ELEVATION', $Attributes, [System.ValueType])
+    $TypeBuilder.DefineField('TokenIsElevated', [UInt32], 'Public') | Out-Null
+    $TOKEN_ELEVATION = $TypeBuilder.CreateType()
 
     #Struct LUID_AND_ATTRIBUTES
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
@@ -456,7 +456,7 @@ Blog on this script: http://clymb3r.wordpress.com/2013/11/03/powershell-and-toke
     $TypeBuilder.DefineField('Luid', $LUID, 'Public') | Out-Null
     $TypeBuilder.DefineField('Attributes', [UInt32], 'Public') | Out-Null
     $LUID_AND_ATTRIBUTES = $TypeBuilder.CreateType()
-		
+        
     #Struct TOKEN_PRIVILEGES
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
     $TypeBuilder = $ModuleBuilder.DefineType('TOKEN_PRIVILEGES', $Attributes, [System.ValueType], 16)
@@ -515,68 +515,68 @@ Blog on this script: http://clymb3r.wordpress.com/2013/11/03/powershell-and-toke
     #Win32Functions
     ###############################
     $OpenProcessAddr = Get-ProcAddress kernel32.dll OpenProcess
-	$OpenProcessDelegate = Get-DelegateType @([UInt32], [Bool], [UInt32]) ([IntPtr])
-	$OpenProcess = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($OpenProcessAddr, $OpenProcessDelegate)
+    $OpenProcessDelegate = Get-DelegateType @([UInt32], [Bool], [UInt32]) ([IntPtr])
+    $OpenProcess = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($OpenProcessAddr, $OpenProcessDelegate)
 
     $OpenProcessTokenAddr = Get-ProcAddress advapi32.dll OpenProcessToken
-	$OpenProcessTokenDelegate = Get-DelegateType @([IntPtr], [UInt32], [IntPtr].MakeByRefType()) ([Bool])
-	$OpenProcessToken = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($OpenProcessTokenAddr, $OpenProcessTokenDelegate)    
+    $OpenProcessTokenDelegate = Get-DelegateType @([IntPtr], [UInt32], [IntPtr].MakeByRefType()) ([Bool])
+    $OpenProcessToken = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($OpenProcessTokenAddr, $OpenProcessTokenDelegate)    
 
     $GetTokenInformationAddr = Get-ProcAddress advapi32.dll GetTokenInformation
-	$GetTokenInformationDelegate = Get-DelegateType @([IntPtr], $TOKEN_INFORMATION_CLASS, [IntPtr], [UInt32], [UInt32].MakeByRefType()) ([Bool])
-	$GetTokenInformation = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($GetTokenInformationAddr, $GetTokenInformationDelegate)    
+    $GetTokenInformationDelegate = Get-DelegateType @([IntPtr], $TOKEN_INFORMATION_CLASS, [IntPtr], [UInt32], [UInt32].MakeByRefType()) ([Bool])
+    $GetTokenInformation = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($GetTokenInformationAddr, $GetTokenInformationDelegate)    
 
     $SetThreadTokenAddr = Get-ProcAddress advapi32.dll SetThreadToken
-	$SetThreadTokenDelegate = Get-DelegateType @([IntPtr], [IntPtr]) ([Bool])
-	$SetThreadToken = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($SetThreadTokenAddr, $SetThreadTokenDelegate)    
+    $SetThreadTokenDelegate = Get-DelegateType @([IntPtr], [IntPtr]) ([Bool])
+    $SetThreadToken = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($SetThreadTokenAddr, $SetThreadTokenDelegate)    
 
     $ImpersonateLoggedOnUserAddr = Get-ProcAddress advapi32.dll ImpersonateLoggedOnUser
-	$ImpersonateLoggedOnUserDelegate = Get-DelegateType @([IntPtr]) ([Bool])
-	$ImpersonateLoggedOnUser = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($ImpersonateLoggedOnUserAddr, $ImpersonateLoggedOnUserDelegate)
+    $ImpersonateLoggedOnUserDelegate = Get-DelegateType @([IntPtr]) ([Bool])
+    $ImpersonateLoggedOnUser = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($ImpersonateLoggedOnUserAddr, $ImpersonateLoggedOnUserDelegate)
 
     $RevertToSelfAddr = Get-ProcAddress advapi32.dll RevertToSelf
-	$RevertToSelfDelegate = Get-DelegateType @() ([Bool])
-	$RevertToSelf = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($RevertToSelfAddr, $RevertToSelfDelegate)
+    $RevertToSelfDelegate = Get-DelegateType @() ([Bool])
+    $RevertToSelf = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($RevertToSelfAddr, $RevertToSelfDelegate)
 
     $LsaGetLogonSessionDataAddr = Get-ProcAddress secur32.dll LsaGetLogonSessionData
-	$LsaGetLogonSessionDataDelegate = Get-DelegateType @([IntPtr], [IntPtr].MakeByRefType()) ([UInt32])
-	$LsaGetLogonSessionData = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($LsaGetLogonSessionDataAddr, $LsaGetLogonSessionDataDelegate)
+    $LsaGetLogonSessionDataDelegate = Get-DelegateType @([IntPtr], [IntPtr].MakeByRefType()) ([UInt32])
+    $LsaGetLogonSessionData = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($LsaGetLogonSessionDataAddr, $LsaGetLogonSessionDataDelegate)
 
     $CreateProcessWithTokenWAddr = Get-ProcAddress advapi32.dll CreateProcessWithTokenW
-	$CreateProcessWithTokenWDelegate = Get-DelegateType @([IntPtr], [UInt32], [IntPtr], [IntPtr], [UInt32], [IntPtr], [IntPtr], [IntPtr], [IntPtr]) ([Bool])
-	$CreateProcessWithTokenW = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($CreateProcessWithTokenWAddr, $CreateProcessWithTokenWDelegate)
+    $CreateProcessWithTokenWDelegate = Get-DelegateType @([IntPtr], [UInt32], [IntPtr], [IntPtr], [UInt32], [IntPtr], [IntPtr], [IntPtr], [IntPtr]) ([Bool])
+    $CreateProcessWithTokenW = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($CreateProcessWithTokenWAddr, $CreateProcessWithTokenWDelegate)
 
     $memsetAddr = Get-ProcAddress msvcrt.dll memset
-	$memsetDelegate = Get-DelegateType @([IntPtr], [Int32], [IntPtr]) ([IntPtr])
-	$memset = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($memsetAddr, $memsetDelegate)
+    $memsetDelegate = Get-DelegateType @([IntPtr], [Int32], [IntPtr]) ([IntPtr])
+    $memset = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($memsetAddr, $memsetDelegate)
 
     $DuplicateTokenExAddr = Get-ProcAddress advapi32.dll DuplicateTokenEx
-	$DuplicateTokenExDelegate = Get-DelegateType @([IntPtr], [UInt32], [IntPtr], [UInt32], [UInt32], [IntPtr].MakeByRefType()) ([Bool])
-	$DuplicateTokenEx = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($DuplicateTokenExAddr, $DuplicateTokenExDelegate)
+    $DuplicateTokenExDelegate = Get-DelegateType @([IntPtr], [UInt32], [IntPtr], [UInt32], [UInt32], [IntPtr].MakeByRefType()) ([Bool])
+    $DuplicateTokenEx = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($DuplicateTokenExAddr, $DuplicateTokenExDelegate)
 
     $LookupAccountSidWAddr = Get-ProcAddress advapi32.dll LookupAccountSidW
-	$LookupAccountSidWDelegate = Get-DelegateType @([IntPtr], [IntPtr], [IntPtr], [UInt32].MakeByRefType(), [IntPtr], [UInt32].MakeByRefType(), [UInt32].MakeByRefType()) ([Bool])
-	$LookupAccountSidW = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($LookupAccountSidWAddr, $LookupAccountSidWDelegate)
+    $LookupAccountSidWDelegate = Get-DelegateType @([IntPtr], [IntPtr], [IntPtr], [UInt32].MakeByRefType(), [IntPtr], [UInt32].MakeByRefType(), [UInt32].MakeByRefType()) ([Bool])
+    $LookupAccountSidW = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($LookupAccountSidWAddr, $LookupAccountSidWDelegate)
 
     $CloseHandleAddr = Get-ProcAddress kernel32.dll CloseHandle
-	$CloseHandleDelegate = Get-DelegateType @([IntPtr]) ([Bool])
-	$CloseHandle = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($CloseHandleAddr, $CloseHandleDelegate)
+    $CloseHandleDelegate = Get-DelegateType @([IntPtr]) ([Bool])
+    $CloseHandle = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($CloseHandleAddr, $CloseHandleDelegate)
 
     $LsaFreeReturnBufferAddr = Get-ProcAddress secur32.dll LsaFreeReturnBuffer
-	$LsaFreeReturnBufferDelegate = Get-DelegateType @([IntPtr]) ([UInt32])
-	$LsaFreeReturnBuffer = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($LsaFreeReturnBufferAddr, $LsaFreeReturnBufferDelegate)
+    $LsaFreeReturnBufferDelegate = Get-DelegateType @([IntPtr]) ([UInt32])
+    $LsaFreeReturnBuffer = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($LsaFreeReturnBufferAddr, $LsaFreeReturnBufferDelegate)
 
     $OpenThreadAddr = Get-ProcAddress kernel32.dll OpenThread
-	$OpenThreadDelegate = Get-DelegateType @([UInt32], [Bool], [UInt32]) ([IntPtr])
-	$OpenThread = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($OpenThreadAddr, $OpenThreadDelegate)
+    $OpenThreadDelegate = Get-DelegateType @([UInt32], [Bool], [UInt32]) ([IntPtr])
+    $OpenThread = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($OpenThreadAddr, $OpenThreadDelegate)
 
     $OpenThreadTokenAddr = Get-ProcAddress advapi32.dll OpenThreadToken
-	$OpenThreadTokenDelegate = Get-DelegateType @([IntPtr], [UInt32], [Bool], [IntPtr].MakeByRefType()) ([Bool])
-	$OpenThreadToken = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($OpenThreadTokenAddr, $OpenThreadTokenDelegate)
+    $OpenThreadTokenDelegate = Get-DelegateType @([IntPtr], [UInt32], [Bool], [IntPtr].MakeByRefType()) ([Bool])
+    $OpenThreadToken = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($OpenThreadTokenAddr, $OpenThreadTokenDelegate)
 
     $CreateProcessAsUserWAddr = Get-ProcAddress advapi32.dll CreateProcessAsUserW
-	$CreateProcessAsUserWDelegate = Get-DelegateType @([IntPtr], [IntPtr], [IntPtr], [IntPtr], [IntPtr], [Bool], [UInt32], [IntPtr], [IntPtr], [IntPtr], [IntPtr]) ([Bool])
-	$CreateProcessAsUserW = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($CreateProcessAsUserWAddr, $CreateProcessAsUserWDelegate)
+    $CreateProcessAsUserWDelegate = Get-DelegateType @([IntPtr], [IntPtr], [IntPtr], [IntPtr], [IntPtr], [Bool], [UInt32], [IntPtr], [IntPtr], [IntPtr], [IntPtr]) ([Bool])
+    $CreateProcessAsUserW = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($CreateProcessAsUserWAddr, $CreateProcessAsUserWDelegate)
 
     $OpenWindowStationWAddr = Get-ProcAddress user32.dll OpenWindowStationW
     $OpenWindowStationWDelegate = Get-DelegateType @([IntPtr], [Bool], [UInt32]) ([IntPtr])
