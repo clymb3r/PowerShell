@@ -1,6 +1,7 @@
 function Start-HackSql {
     [CmdletBinding()]
     param (
+	$Login = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
     )
 
     Begin {
@@ -8,8 +9,6 @@ function Start-HackSql {
     } 
 
     Process {
-        $userName = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-
         $services = Get-Service | Where { ($_.Name -eq 'MSSQLSERVER' -or $_.Name -like 'MSSQL$*') -and $_.Status -eq "Running" }
         foreach ($service in $services) {
             if ($service.Name -eq "MSSQLSERVER") {
@@ -27,14 +26,14 @@ function Start-HackSql {
 
             $sqlConnection = New-Object System.Data.SqlClient.SqlConnection("Data Source=$sqlName;Trusted_Connection=True")
             $sqlConnection.Open()
-            $sqlCommand = New-Object System.Data.SqlClient.SqlCommand("If Not Exists (Select Top 1 0 From sys.server_principals Where name = '$userName')
+            $sqlCommand = New-Object System.Data.SqlClient.SqlCommand("If Not Exists (Select Top 1 0 From sys.server_principals Where name = '$Login')
 Begin
-    Create Login [$userName] From Windows
+    Create Login [$Login] From Windows
 End
 
-If Not Exists (Select Top 1 0 From master.sys.server_principals sp Join master.sys.server_role_members srp On sp.principal_id = srp.member_principal_id Join master.sys.server_principals spr On srp.role_principal_id = spr.principal_id Where sp.name = '$userName' And spr.name = 'sysadmin')
+If Not Exists (Select Top 1 0 From master.sys.server_principals sp Join master.sys.server_role_members srp On sp.principal_id = srp.member_principal_id Join master.sys.server_principals spr On srp.role_principal_id = spr.principal_id Where sp.name = '$Login' And spr.name = 'sysadmin')
 Begin
-    Exec sp_addsrvrolemember '$userName', 'sysadmin'
+    Exec sp_addsrvrolemember '$Login', 'sysadmin'
 End", $sqlConnection)
             $sqlCommand.ExecuteNonQuery() | Out-Null
             $sqlConnection.Close()
