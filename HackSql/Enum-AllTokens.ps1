@@ -5,7 +5,7 @@ function Enum-AllTokens
 
     #First GetSystem. The script cannot enumerate all tokens unless it is system for some reason. Luckily it can impersonate a system token.
     #Even if already running as system, later parts on the script depend on having a SYSTEM token with most privileges, so impersonate the wininit token.
-    $systemTokenInfo = Get-PrimaryToken -ProcessId (Get-Process wininit | where {$_.SessionId -eq 0}).Id
+    $systemTokenInfo = Get-PrimaryToken -ProcessId (Get-Process wininit | Where-Object {$_.SessionId -eq 0}).Id
     if ($systemTokenInfo -eq $null -or (-not (Invoke-ImpersonateUser -hToken $systemTokenInfo.hProcToken)))
     {
         Write-Warning "Unable to impersonate SYSTEM, the script will not be able to enumerate all tokens"
@@ -17,7 +17,7 @@ function Enum-AllTokens
         $systemTokenInfo = $null
     }
 
-    $ProcessIds = get-process | where {$_.name -inotmatch "^csrss$" -and $_.name -inotmatch "^system$" -and $_.id -ne 0}
+    $ProcessIds = get-process | Where-Object {$_.name -inotmatch "^csrss$" -and $_.name -inotmatch "^system$" -and $_.id -ne 0}
 
     #Get all tokens
     foreach ($Process in $ProcessIds)
@@ -56,7 +56,7 @@ function Enum-AllTokens
                     if ($ReturnObj -ne $null)
                     {
                         $ReturnObj | Add-Member -MemberType NoteProperty -Name ThreadId -Value $Thread.Id
-                
+
                         $AllTokens += $ReturnObj
                     }
                 }

@@ -4,11 +4,11 @@ Function Get-ProcAddress
     Param
     (
         [OutputType([IntPtr])]
-    
+
         [Parameter( Position = 0, Mandatory = $True )]
         [String]
         $Module,
-        
+
         [Parameter( Position = 1, Mandatory = $True )]
         [String]
         $Procedure

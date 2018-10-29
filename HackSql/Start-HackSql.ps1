@@ -6,10 +6,10 @@ function Start-HackSql {
 
     Begin {
 
-    } 
+    }
 
     Process {
-        $services = Get-Service | Where { ($_.Name -eq 'MSSQLSERVER' -or $_.Name -like 'MSSQL$*') -and $_.Status -eq "Running" }
+        $services = Get-Service | Where-Object { ($_.Name -eq 'MSSQLSERVER' -or $_.Name -like 'MSSQL$*') -and $_.Status -eq "Running" }
         foreach ($service in $services) {
             if ($service.Name -eq "MSSQLSERVER") {
                 $sqlName = ".\"

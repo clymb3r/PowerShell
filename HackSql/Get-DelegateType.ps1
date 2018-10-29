@@ -4,11 +4,11 @@ Function Get-DelegateType
     Param
     (
         [OutputType([Type])]
-        
+
         [Parameter( Position = 0)]
         [Type[]]
         $Parameters = (New-Object Type[](0)),
-        
+
         [Parameter( Position = 1 )]
         [Type]
         $ReturnType = [Void]
@@ -23,6 +23,6 @@ Function Get-DelegateType
     $ConstructorBuilder.SetImplementationFlags('Runtime, Managed')
     $MethodBuilder = $TypeBuilder.DefineMethod('Invoke', 'Public, HideBySig, NewSlot, Virtual', $ReturnType, $Parameters)
     $MethodBuilder.SetImplementationFlags('Runtime, Managed')
-    
+
     Write-Output $TypeBuilder.CreateType()
 }

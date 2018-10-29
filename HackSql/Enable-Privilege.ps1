@@ -20,7 +20,7 @@ function Enable-Privilege
     {
 	    Throw "Unable to get the handle to the current thread"
     }
-	
+
     [IntPtr]$ThreadToken = [IntPtr]::Zero
     [Bool]$Result = $OpenThreadToken.Invoke($ThreadHandle, $Win32Constants.TOKEN_QUERY -bor $Win32Constants.TOKEN_ADJUST_PRIVILEGES, $false, [Ref]$ThreadToken)
     $ErrorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
@@ -34,7 +34,7 @@ function Enable-Privilege
 		    {
 			    Throw (New-Object ComponentModel.Win32Exception)
 		    }
-			
+
 		    $Result = $OpenThreadToken.Invoke($ThreadHandle, $Win32Constants.TOKEN_QUERY -bor $Win32Constants.TOKEN_ADJUST_PRIVILEGES, $false, [Ref]$ThreadToken)
 		    if ($Result -eq $false)
 		    {

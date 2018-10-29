@@ -35,7 +35,7 @@ function Get-TokenInformation
         else
         {
             $LogonSessionData = [System.Runtime.InteropServices.Marshal]::PtrToStructure($LogonSessionDataPtr, [Type]$SECURITY_LOGON_SESSION_DATA)
-            if ($LogonSessionData.Username.Buffer -ne [IntPtr]::Zero -and 
+            if ($LogonSessionData.Username.Buffer -ne [IntPtr]::Zero -and
                 $LogonSessionData.LoginDomain.Buffer -ne [IntPtr]::Zero)
             {
                 #Get the username and domainname associated with the token
@@ -43,7 +43,7 @@ function Get-TokenInformation
                 $Domain = [System.Runtime.InteropServices.Marshal]::PtrToStringUni($LogonSessionData.LoginDomain.Buffer, $LogonSessionData.LoginDomain.Length/2)
 
                 #If UserName is for the computer account, figure out what account it actually is (SYSTEM, NETWORK SERVICE)
-                #Only do this for the computer account because other accounts return correctly. Also, doing this for a domain account 
+                #Only do this for the computer account because other accounts return correctly. Also, doing this for a domain account
                 #results in querying the domain controller which is unwanted.
                 if ($Username -ieq "$($env:COMPUTERNAME)`$")
                 {
@@ -74,7 +74,7 @@ function Get-TokenInformation
 
                 $ReturnObj = New-Object PSObject
                 $ReturnObj | Add-Member -Type NoteProperty -Name Domain -Value $Domain
-                $ReturnObj | Add-Member -Type NoteProperty -Name Username -Value $Username    
+                $ReturnObj | Add-Member -Type NoteProperty -Name Username -Value $Username
                 $ReturnObj | Add-Member -Type NoteProperty -Name hToken -Value $hToken
                 $ReturnObj | Add-Member -Type NoteProperty -Name LogonType -Value $LogonSessionData.LogonType
 
@@ -89,7 +89,7 @@ function Get-TokenInformation
                 if (-not $Success)
                 {
                     $ErrorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
-                    Write-Warning "GetTokenInformation failed to retrieve TokenElevation status. ErrorCode: $ErrorCode" 
+                    Write-Warning "GetTokenInformation failed to retrieve TokenElevation status. ErrorCode: $ErrorCode"
                 }
                 else
                 {
@@ -191,7 +191,7 @@ function Get-TokenInformation
                 else
                 {
                     $TokenPrivileges = [System.Runtime.InteropServices.Marshal]::PtrToStructure($TokenPrivilegesPtr, [Type]$TOKEN_PRIVILEGES)
-                    
+
                     #Loop through each privilege
                     [IntPtr]$PrivilegesBasePtr = [IntPtr](Add-SignedIntAsUnsigned $TokenPrivilegesPtr ([System.Runtime.InteropServices.Marshal]::OffsetOf([Type]$TOKEN_PRIVILEGES, "Privileges")))
                     $LuidAndAttributeSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type]$LUID_AND_ATTRIBUTES)

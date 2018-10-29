@@ -5,12 +5,12 @@ Function Add-SignedIntAsUnsigned
 	[Parameter(Position = 0, Mandatory = $true)]
 	[Int64]
 	$Value1,
-	
+
 	[Parameter(Position = 1, Mandatory = $true)]
 	[Int64]
 	$Value2
 	)
-	
+
 	[Byte[]]$Value1Bytes = [BitConverter]::GetBytes($Value1)
 	[Byte[]]$Value2Bytes = [BitConverter]::GetBytes($Value2)
 	[Byte[]]$FinalBytes = [BitConverter]::GetBytes([UInt64]0)
@@ -24,7 +24,7 @@ Function Add-SignedIntAsUnsigned
 			[UInt16]$Sum = $Value1Bytes[$i] + $Value2Bytes[$i] + $CarryOver
 
 			$FinalBytes[$i] = $Sum -band 0x00FF
-			
+
 			if (($Sum -band 0xFF00) -eq 0x100)
 			{
 				$CarryOver = 1
@@ -39,6 +39,6 @@ Function Add-SignedIntAsUnsigned
 	{
 		Throw "Cannot add bytearrays of different sizes"
 	}
-	
+
 	return [BitConverter]::ToInt64($FinalBytes, 0)
 }
