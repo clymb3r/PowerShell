@@ -1,6 +1,6 @@
 ﻿function Create-ProcessWithToken
 {
-    Param(
+    param (
         [Parameter(Position=0, Mandatory=$true)]
         [IntPtr]
         $hToken,

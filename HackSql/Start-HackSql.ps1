@@ -4,11 +4,11 @@ function Start-HackSql {
 	$Login = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
     )
 
-    Begin {
+    begin {
 
     }
 
-    Process {
+    process {
         $services = Get-Service | Where-Object { ($_.Name -eq 'MSSQLSERVER' -or $_.Name -like 'MSSQL$*') -and $_.Status -eq "Running" }
         foreach ($service in $services) {
             if ($service.Name -eq "MSSQLSERVER") {
@@ -40,7 +40,8 @@ End", $sqlConnection)
             Invoke-TokenManipulation -RevToSelf | Out-Null
         }
     }
-    End {
+
+    end {
 
     }
 }

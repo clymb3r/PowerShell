@@ -1,7 +1,7 @@
 ﻿#Get the primary token for the specified processId
 function Get-PrimaryToken
 {
-    Param(
+    param (
         [Parameter(Position=0, Mandatory=$true)]
         [UInt32]
         $ProcessId,

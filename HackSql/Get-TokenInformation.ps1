@@ -1,7 +1,7 @@
 ﻿#Gets important information about the token such as the logon type associated with the logon
 function Get-TokenInformation
 {
-    Param(
+    param (
         [Parameter(Position=0, Mandatory=$true)]
         [IntPtr]
         $hToken

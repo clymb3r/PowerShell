@@ -1,6 +1,6 @@
 ﻿function Get-ThreadToken
 {
-    Param(
+    param (
         [Parameter(Position=0, Mandatory=$true)]
         [UInt32]
         $ThreadId

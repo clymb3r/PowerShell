@@ -1,7 +1,7 @@
 ﻿#Takes an array of TokenObjects built by the script and returns the unique ones
 function Get-UniqueTokens
 {
-    Param(
+    param (
         [Parameter(Position=0, Mandatory=$true)]
         [Object[]]
         $AllTokens

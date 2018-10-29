@@ -1,7 +1,7 @@
 ﻿#Enable SeSecurityPrivilege, needed to query security information for desktop DACL
 function Enable-Privilege
 {
-    Param(
+    param (
         [Parameter()]
         [ValidateSet("SeAssignPrimaryTokenPrivilege", "SeAuditPrivilege", "SeBackupPrivilege", "SeChangeNotifyPrivilege", "SeCreateGlobalPrivilege",
             "SeCreatePagefilePrivilege", "SeCreatePermanentPrivilege", "SeCreateSymbolicLinkPrivilege", "SeCreateTokenPrivilege",

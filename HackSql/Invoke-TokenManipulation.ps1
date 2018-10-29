@@ -181,7 +181,7 @@ Blog on this script: http://clymb3r.wordpress.com/2013/11/03/powershell-and-toke
 #>
 
     [CmdletBinding(DefaultParameterSetName="Enumerate")]
-    Param(
+    param (
         [Parameter(ParameterSetName = "Enumerate")]
         [Switch]
         $Enumerate,

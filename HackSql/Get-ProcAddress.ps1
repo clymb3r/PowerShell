@@ -1,7 +1,7 @@
 ﻿#Function written by Matt Graeber, Twitter: @mattifestation, Blog: http://www.exploit-monday.com/
-Function Get-ProcAddress
+function Get-ProcAddress
 {
-    Param
+    param
     (
         [OutputType([IntPtr])]
 

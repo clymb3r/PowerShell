@@ -1,6 +1,6 @@
 ﻿function Set-DesktopACLToAllowEveryone
 {
-    Param(
+    param (
         [IntPtr]$hObject
         )
 

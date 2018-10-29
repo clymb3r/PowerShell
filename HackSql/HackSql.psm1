@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param(
+param (
 )
 
 # Because these are set once in a script scope (modules and functions are all considered in one script scope)

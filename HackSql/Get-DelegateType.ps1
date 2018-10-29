@@ -1,7 +1,7 @@
 ﻿#Function written by Matt Graeber, Twitter: @mattifestation, Blog: http://www.exploit-monday.com/
-Function Get-DelegateType
+function Get-DelegateType
 {
-    Param
+    param
     (
         [OutputType([Type])]
 

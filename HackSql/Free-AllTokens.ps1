@@ -1,6 +1,6 @@
 ﻿function Free-AllTokens
 {
-    Param(
+    param (
         [Parameter(Position=0, Mandatory=$true)]
         [PSObject[]]
         $TokenInfoObjs

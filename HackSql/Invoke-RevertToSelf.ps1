@@ -1,6 +1,6 @@
 ﻿function Invoke-RevertToSelf
 {
-    Param(
+    param (
         [Parameter(Position=0)]
         [Switch]
         $ShowOutput

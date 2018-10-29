@@ -1,7 +1,7 @@
 ﻿#Used to add 64bit memory addresses
-Function Add-SignedIntAsUnsigned
+function Add-SignedIntAsUnsigned
 {
-	Param(
+	param (
 	[Parameter(Position = 0, Mandatory = $true)]
 	[Int64]
 	$Value1,
