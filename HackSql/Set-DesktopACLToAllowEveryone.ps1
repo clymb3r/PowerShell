@@ -1,4 +1,4 @@
-﻿function Set-DesktopACLToAllowEveryone
+function Set-DesktopACLToAllowEveryone
 {
     param (
         [IntPtr]$hObject

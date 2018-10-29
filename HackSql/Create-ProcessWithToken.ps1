@@ -1,4 +1,4 @@
-﻿function Create-ProcessWithToken
+function Create-ProcessWithToken
 {
     param (
         [Parameter(Position=0, Mandatory=$true)]

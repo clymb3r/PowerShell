@@ -1,4 +1,4 @@
-﻿#Gets important information about the token such as the logon type associated with the logon
+#Gets important information about the token such as the logon type associated with the logon
 function Get-TokenInformation
 {
     param (

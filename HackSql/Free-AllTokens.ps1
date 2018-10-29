@@ -1,4 +1,4 @@
-﻿function Free-AllTokens
+function Free-AllTokens
 {
     param (
         [Parameter(Position=0, Mandatory=$true)]

@@ -1,4 +1,4 @@
-﻿#Enumerate all tokens on the system. Returns an array of objects with the token and information about the token.
+#Enumerate all tokens on the system. Returns an array of objects with the token and information about the token.
 function Enum-AllTokens
 {
     $AllTokens = @()

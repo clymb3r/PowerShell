@@ -1,4 +1,4 @@
-﻿function Invoke-RevertToSelf
+function Invoke-RevertToSelf
 {
     param (
         [Parameter(Position=0)]

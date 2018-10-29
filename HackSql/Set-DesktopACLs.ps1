@@ -1,4 +1,4 @@
-﻿#Change the ACL of the WindowStation and Desktop
+#Change the ACL of the WindowStation and Desktop
 function Set-DesktopACLs
 {
     Enable-Privilege -Privilege SeSecurityPrivilege

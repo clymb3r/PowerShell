@@ -1,4 +1,4 @@
-﻿#Enable SeSecurityPrivilege, needed to query security information for desktop DACL
+#Enable SeSecurityPrivilege, needed to query security information for desktop DACL
 function Enable-Privilege
 {
     param (

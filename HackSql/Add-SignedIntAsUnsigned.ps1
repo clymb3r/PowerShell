@@ -1,4 +1,4 @@
-﻿#Used to add 64bit memory addresses
+#Used to add 64bit memory addresses
 function Add-SignedIntAsUnsigned
 {
 	param (

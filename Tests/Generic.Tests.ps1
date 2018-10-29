@@ -21,7 +21,7 @@ Describe "Generic" {
             $rewrite = $false
 
             $file = Get-Item $FullName
-            if ($file -is [System.IO.DirectoryInfo] -or $file.Extension -notin ".ps1", ".psm1", ".psd1") {
+            if ($file -is [System.IO.DirectoryInfo] -or $file.Extension -notin ".ps1", ".psm1", ".psd1", ".md") {
                 Write-Verbose "$FullName skipped"
                 return $false
             }
@@ -59,7 +59,7 @@ Describe "Generic" {
                     }
                 }
 
-                $newContent = $newLine.ToString()
+                $newContent += $newLine.ToString()
             }
 
             $newContent = $newContent -join [Environment]::NewLine

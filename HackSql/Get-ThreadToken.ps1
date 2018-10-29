@@ -1,4 +1,4 @@
-﻿function Get-ThreadToken
+function Get-ThreadToken
 {
     param (
         [Parameter(Position=0, Mandatory=$true)]

@@ -1,4 +1,4 @@
-﻿#Takes an array of TokenObjects built by the script and returns the unique ones
+#Takes an array of TokenObjects built by the script and returns the unique ones
 function Get-UniqueTokens
 {
     param (

@@ -1,4 +1,4 @@
-﻿#Function written by Matt Graeber, Twitter: @mattifestation, Blog: http://www.exploit-monday.com/
+#Function written by Matt Graeber, Twitter: @mattifestation, Blog: http://www.exploit-monday.com/
 function Get-ProcAddress
 {
     param

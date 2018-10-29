@@ -1,4 +1,4 @@
-﻿#Get the primary token for the specified processId
+#Get the primary token for the specified processId
 function Get-PrimaryToken
 {
     param (

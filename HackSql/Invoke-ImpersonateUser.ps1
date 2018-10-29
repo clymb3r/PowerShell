@@ -1,4 +1,4 @@
-﻿function Invoke-ImpersonateUser
+function Invoke-ImpersonateUser
 {
     param (
         [Parameter(Position=0, Mandatory=$true)]

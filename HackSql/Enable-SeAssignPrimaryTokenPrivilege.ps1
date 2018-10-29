@@ -1,4 +1,4 @@
-﻿#Enable SeAssignPrimaryTokenPrivilege, needed to query security information for desktop DACL
+#Enable SeAssignPrimaryTokenPrivilege, needed to query security information for desktop DACL
 function Enable-SeAssignPrimaryTokenPrivilege
 {
     [IntPtr]$ThreadHandle = $GetCurrentThread.Invoke()
