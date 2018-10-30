@@ -1,0 +1,22 @@
+build: false
+
+test_script:
+  - ps: |
+      Install-Module PSScriptAnalyzer -Force -AllowClobber
+
+      $env:PSModulePath = "$((Get-Item .).FullName)\;$($env:PSModulePath)"
+      $res = Invoke-Pester -Path "." -OutputFormat NUnitXml -OutputFile TestsResults.xml -PassThru
+      (New-Object 'System.Net.WebClient').UploadFile("https://ci.appveyor.com/api/testresults/nunit/$($env:APPVEYOR_JOB_ID)", (Resolve-Path .\TestsResults.xml))
+      if ($res.FailedCount -gt 0) { throw "$($res.FailedCount) tests failed."}
+
+# Disabled, only seems to crash AppVeyor
+#  - pwsh: |
+#      Install-Module Disposable -Force -AllowClobber
+#      Install-Module Error -Force -AllowClobber
+#      Install-Module Pester -Force -AllowClobber
+#      Install-Module PoshRSJob -Force -AllowClobber
+#
+#      $env:PSModulePath = "$((Get-Item .).FullName)\;$($env:PSModulePath)"
+#      $res = Invoke-Pester -Path "." -OutputFormat NUnitXml -OutputFile TestsResults.xml -PassThru
+#      (New-Object 'System.Net.WebClient').UploadFile("https://ci.appveyor.com/api/testresults/nunit/$($env:APPVEYOR_JOB_ID)", (Resolve-Path .\TestsResults.xml))
+#      if ($res.FailedCount -gt 0) { throw "$($res.FailedCount) tests failed."}
