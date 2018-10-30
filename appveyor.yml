@@ -2,6 +2,7 @@ build: false
 
 test_script:
   - ps: |
+      Install-Module Pester -Force -AllowClobber
       Install-Module PSScriptAnalyzer -Force -AllowClobber
 
       $env:PSModulePath = "$((Get-Item .).FullName)\;$($env:PSModulePath)"
