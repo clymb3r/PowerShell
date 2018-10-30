@@ -9,10 +9,10 @@
 @{
 
 # Script module or binary module file associated with this manifest.
-ModuleToProcess = 'HackSql.psm1'
+RootModule = 'HackSql.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.0'
+ModuleVersion = '1.0.2'
 
 # ID used to uniquely identify this module
 GUID = 'd7c86398-e44a-4374-b7f9-a5240ad6f26b'
@@ -21,13 +21,13 @@ GUID = 'd7c86398-e44a-4374-b7f9-a5240ad6f26b'
 Author = 'Cody Konior'
 
 # Company or vendor of this module
-CompanyName = 'Safe SQL'
+CompanyName = ''
 
 # Copyright statement for this module
 Copyright = '(c) 2015 Cody Konior. All rights reserved.'
 
 # Description of the functionality provided by this module
-# Description = ''
+Description = 'Gain access to SQL Server with only Windows Administrator permissions'
 
 # Minimum version of the Windows PowerShell engine required by this module
 # PowerShellVersion = ''
