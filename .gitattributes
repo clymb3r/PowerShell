@@ -1,0 +1,19 @@
+# Auto detect text files and perform LF normalization
+*               text=auto
+
+# Project
+LICENSE             diff text eol=crlf
+*.md                diff text eol=crlf
+*.ps1               diff text eol=crlf
+*.psd1              diff text eol=crlf
+*.psm1              diff text eol=crlf
+*.sql               diff text eol=crlf
+*.txt               diff text eol=crlf
+*.svg               diff text eol=lf
+
+# Internal
+.gitattributes      text eol=lf
+.gitignore          text eol=lf
+.gitconfig          text eol=lf
+*.code-workspace    diff text eol=crlf
+*.json              diff text eol=crlf
